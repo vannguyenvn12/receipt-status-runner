@@ -34,7 +34,7 @@ async function main() {
     const emailSheet = data[i]['Email'];
     try {
       const res = await axios.post(
-        'https://02cf6b6d4ffc.ngrok-free.app/send-data',
+        process.env.BACKEND_URL,
         {
           receiptNumber,
         },
