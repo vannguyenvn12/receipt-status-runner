@@ -87,6 +87,8 @@ async function insertEmailToDB(parsed) {
       conn2.release();
 
       console.log(`✅ USCIS status updated for ${receipt}`);
+      console.log(`✅ USCIS status updated to status ${statusInfo.status_en}`);
+      console.log(`✅ USCIS status updated to status ${status_vi}`);
     }
   } catch (err) {
     console.error('❌ Error inserting email:', err);
