@@ -1,6 +1,7 @@
 const Imap = require('node-imap');
 const { simpleParser } = require('mailparser');
 const insertEmailToDB = require('../insertMail');
+const isForwardedChangeEmail = require('../functions/isForwardedChangeEmail');
 require('dotenv').config();
 
 let imap; // Global để tái sử dụng
@@ -37,7 +38,10 @@ function createImapConnection() {
                 date: parsed.date,
                 body: parsed.text,
               });
-              await insertEmailToDB(parsed);
+
+              if (isForwardedChangeEmail(parsed)) {
+                await insertEmailToDB(parsed);
+              }
             });
           });
         });
