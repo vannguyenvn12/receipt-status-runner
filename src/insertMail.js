@@ -1,6 +1,7 @@
 const pool = require('./db/db');
 const getReceiptByEmail = require('./functions/getReceiptByEmail');
 const getStatus = require('./functions/getStatus');
+const sendStatusUpdateMail = require('./mail/mailer');
 
 function extractForwardedRecipient(emailBody) {
   const match = emailBody.match(/To:\s*<?([^>\n\r]+)>?/i);
@@ -105,10 +106,10 @@ async function insertEmailToDB(parsed) {
     );
 
     // Nếu không thay đổi trạng thái thì không cần update
-    if (currentData?.status_en === statusInfo.status_en) {
-      console.log(`↪️ Không thay đổi trạng thái: ${receipt}`);
-      return;
-    }
+    // if (currentData?.status_en === statusInfo.status_en) {
+    //   console.log(`↪️ Không thay đổi trạng thái: ${receipt}`);
+    //   return;
+    // }
 
     // Ghi log trước khi update
     const logValuesBeforeUpdate = [
@@ -128,9 +129,9 @@ async function insertEmailToDB(parsed) {
       `INSERT INTO status_log (
          updated_at_log, receipt_number, email, updated_at_status,
          action_desc, status_en, status_vi, notice_date, response_json,
-         has_receipt, retries, form_info
+         has_receipt, retries, form_info, is_log_email
        )
-       VALUES (NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
       logValuesBeforeUpdate
     );
 
@@ -143,6 +144,13 @@ async function insertEmailToDB(parsed) {
       [statusInfo.action_desc, statusInfo.status_en, status_vi, receipt]
     );
     conn2.release();
+
+    await sendStatusUpdateMail({
+      to: process.env.MAIL_NOTIFY,
+      receipt,
+      status_en: statusInfo.status_en,
+      status_vi,
+    });
 
     console.log(
       `✅ USCIS status updated for ${receipt} → ${statusInfo.status_en} / ${status_vi}`
