@@ -1,18 +1,9 @@
 const xlsx = require('xlsx');
-const axios = require('axios');
-const dayjs = require('dayjs');
 const db = require('./db/db');
+const { callUscisApi } = require('./api/uscisApi');
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function extractNoticeDate(text) {
-  const match = text.match(/on (\w+ \d{1,2}, \d{4})/i);
-  if (match) {
-    return dayjs(match[1]).format('YYYY-MM-DD');
-  }
-  return null;
 }
 
 async function main() {
@@ -33,19 +24,25 @@ async function main() {
     const receiptNumber = data[i]['Receipt Number'];
     const emailSheet = data[i]['Email'];
 
-    const result = await callUscisApi(receiptNumber);
+    let result;
+    let retryCount = 0;
 
-    if (result.wait) {
-      console.log(
-        `⏸ Server báo "đợi chút", tạm dừng 1 phút... (${receiptNumber})`
-      );
-      await sleep(60 * 1000);
-      i--;
-      continue;
+    while (retryCount < 3) {
+      result = await callUscisApi(receiptNumber);
+
+      if (result.wait) {
+        console.log(`⏸ Server báo đợi (${receiptNumber}), tạm nghỉ 1 phút...`);
+        await sleep(60 * 1000);
+        retryCount++;
+        continue;
+      }
+
+      break; // Thoát vòng lặp nếu không phải "wait"
     }
 
-    if (result.invalid || result.error) {
-      console.error(`❌ Lỗi khi xử lý ${receiptNumber}`);
+    // Nếu retry quá 3 lần mà vẫn chưa được thì bỏ qua
+    if (!result || result.wait || result.invalid || result.error) {
+      console.error(`❌ Bỏ qua ${receiptNumber} sau khi thử ${retryCount} lần`);
       continue;
     }
 
@@ -61,7 +58,7 @@ async function main() {
       notice_date: result.notice_date,
       form_info: result.form_info,
       response_json: JSON.stringify(result.raw),
-      retries: 0,
+      retries: retryCount,
       has_receipt: true,
       status_update: false,
     };
@@ -80,6 +77,16 @@ async function main() {
       row.has_receipt,
       row.status_update,
     ];
+
+    // Kiểm tra trùng trước khi insert
+    const [existingRows] = await db.query(
+      'SELECT 1 FROM uscis WHERE receipt_number = ? LIMIT 1',
+      [receiptNumber]
+    );
+    if (existingRows.length > 0) {
+      console.log(`⚠️ Receipt Number ${receiptNumber} đã tồn tại. Bỏ qua.`);
+      continue;
+    }
 
     await db.query(
       `INSERT INTO uscis (
