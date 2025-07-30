@@ -77,6 +77,40 @@ async function insertEmailToDB(parsed) {
 
       const status_vi = map?.vietnamese_status || null;
 
+      // *** Ghi log trước khi update:
+      // 🔍 1. Truy vấn dữ liệu hiện tại từ bảng uscis
+      const [[currentData]] = await pool.query(
+        `SELECT action_desc, status_en, status_vi, notice_date, response_json, has_receipt, retries, form_info 
+   FROM uscis 
+   WHERE receipt_number = ?`,
+        [receipt]
+      );
+
+      // 🔁 2. Ghi log dữ liệu cũ trước khi update
+      const logValuesBeforeUpdate = [
+        receipt,
+        recipient_email,
+        currentData?.action_desc ?? null,
+        currentData?.status_en ?? null,
+        currentData?.status_vi ?? null,
+        currentData?.notice_date ?? null,
+        currentData?.response_json ?? null,
+        currentData?.has_receipt ?? null,
+        currentData?.retries ?? null,
+        currentData?.form_info ?? null,
+      ].map((v) => (v === undefined ? null : v));
+
+      await pool.query(
+        `INSERT INTO status_log (
+     updated_at_log, receipt_number, email, updated_at_status,
+     action_desc, status_en, status_vi, notice_date, response_json,
+     has_receipt, retries, form_info
+   )
+   VALUES (NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+        logValuesBeforeUpdate
+      );
+
+      // *** Update status trong uscis
       const conn2 = await pool.getConnection();
       await conn2.execute(
         `UPDATE uscis 
@@ -85,6 +119,17 @@ async function insertEmailToDB(parsed) {
         [statusInfo.action_desc, statusInfo.status_en, status_vi, receipt]
       );
       conn2.release();
+
+      console.log('*** Debug', {
+        receipt,
+        recipient_email,
+        action_desc: statusInfo.action_desc,
+        status_en: statusInfo.status_en,
+        status_vi,
+        notice_date: statusInfo.notice_date,
+        raw: JSON.stringify(statusInfo.raw_response),
+        form_info: statusInfo.form_info,
+      });
 
       console.log(`✅ USCIS status updated for ${receipt}`);
       console.log(`✅ USCIS status updated to status ${statusInfo.status_en}`);

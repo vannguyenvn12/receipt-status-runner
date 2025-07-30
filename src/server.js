@@ -6,6 +6,7 @@ const axios = require('axios');
 app.use(express.json({ limit: '10mb' })); // tăng limit nếu cần
 
 require('./mail'); // 👈 Gọi mail listener (imap)
+require('./scheduler'); // 👈 Chạy định kỳ
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;
