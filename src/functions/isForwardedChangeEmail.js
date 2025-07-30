@@ -12,7 +12,7 @@ function isForwardedChangeEmail(parsed) {
   console.log('***[Debug] isForwarded', isForwarded);
   console.log('***[Debug] isCorrectSubject', isCorrectSubject);
 
-  return isForwarded && isCorrectSubject;
+  return isCorrectSubject;
 }
 
 module.exports = isForwardedChangeEmail;

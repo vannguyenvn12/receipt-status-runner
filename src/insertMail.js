@@ -4,8 +4,12 @@ const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
 
 function extractForwardedRecipient(emailBody) {
-  const match = emailBody.match(/To:\s*<?([^>\n\r]+)>?/i);
-  return match ? match[1].trim() : null;
+  const matches = emailBody.match(/Đến:\s.*<([^>\n\r]+)>/gim);
+  if (!matches || matches.length === 0) return null;
+
+  const lastMatch = matches[matches.length - 1];
+  const email = lastMatch.match(/<([^>\n\r]+)>/)?.[1];
+  return email?.trim() || null;
 }
 
 function extractForwardedData(body) {
@@ -17,6 +21,31 @@ function extractForwardedData(body) {
   const sent_time_raw = dateLine || null;
 
   return { sender_email, sent_time_raw };
+}
+
+function extractForwardedDataAndRecipient(body) {
+  const lines = body.split('\n').map((line) => line.trim());
+
+  let sender_email = null;
+  let recipient_email = null;
+
+  // Dò ngược để lấy dòng Từ: và Đến: cuối cùng
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+
+    if (!sender_email && /^Từ:.*<.+>$/.test(line)) {
+      sender_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (!recipient_email && /^Đến:.*<.+>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    // Nếu cả 2 đã có thì thoát sớm
+    if (sender_email && recipient_email) break;
+  }
+
+  return { sender_email, recipient_email };
 }
 
 async function insertEmailToDB(parsed) {
@@ -31,9 +60,17 @@ async function insertEmailToDB(parsed) {
   const sender_match = from.match(/"?(.*?)"?\s*<(.+?)>/);
   const sender = sender_match?.[1] || null;
   const receiver = to;
+  const receiverAddress = receiver.value?.[0]?.address || null;
+
   const forwarded_date = new Date(date);
-  const { sender_email, sent_time_raw } = extractForwardedData(email_body);
-  const recipient_email = extractForwardedRecipient(email_body);
+  const { sent_time_raw } = extractForwardedData(email_body);
+  const { sender_email, recipient_email } =
+    extractForwardedDataAndRecipient(email_body);
+
+  console.log('*** CHECK EMAIL', {
+    receiverAddress,
+    sender_email,
+  });
 
   const sql = `
     INSERT INTO email_uscis 
@@ -44,7 +81,7 @@ async function insertEmailToDB(parsed) {
   const values = [
     forwarded_date,
     sender,
-    receiver,
+    receiverAddress,
     subject,
     email_body,
     sender_email,
