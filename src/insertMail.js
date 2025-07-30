@@ -3,6 +3,10 @@ const getReceiptByEmail = require('./functions/getReceiptByEmail');
 const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
 
+// Thời gian cập nhật
+// Nội dung
+// Email
+
 function extractForwardedRecipient(emailBody) {
   const matches = emailBody.match(/Đến:\s.*<([^>\n\r]+)>/gim);
   if (!matches || matches.length === 0) return null;
@@ -185,6 +189,8 @@ async function insertEmailToDB(parsed) {
     await sendStatusUpdateMail({
       to: process.env.MAIL_NOTIFY,
       receipt,
+      content: statusInfo.action_desc,
+      email: recipient_email,
       status_en: statusInfo.status_en,
       status_vi,
     });

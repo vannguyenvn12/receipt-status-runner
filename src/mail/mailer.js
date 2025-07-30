@@ -10,16 +10,29 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-async function sendStatusUpdateMail({ to, receipt, status_en, status_vi }) {
+async function sendStatusUpdateMail({
+  to,
+  receipt,
+  status_en,
+  status_vi,
+  content,
+  email,
+}) {
+  const timeVN = new Date().toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+  });
+
   const mailOptions = {
     from: `"USCIS Notification" <${process.env.MY_MAIL_USER}>`,
     to,
     subject: `📬 USCIS Update: ${receipt}`,
     html: `
-      <p>✅ <strong>Receipt Number:</strong> ${receipt}</p>
-      <p>🔁 <strong>Trạng thái mới:</strong> ${status_en} — ${status_vi}</p>
-      <p>⏱️ <em>Thời gian:</em> ${new Date().toLocaleString()}</p>
-    `,
+        <p>📬 <strong>Receipt Number:</strong> ${receipt}</p>
+        <p>📄 <strong>Trạng thái:</strong> ${status_en} — ${status_vi}</p>
+        <p>📝 <strong>Nội dung:</strong> ${content}</p>
+        <p>📧 <strong>Email:</strong> ${email}</p>
+        <p>⏰ <em>Thời gian:</em> ${timeVN}</p>
+        `,
   };
 
   try {
