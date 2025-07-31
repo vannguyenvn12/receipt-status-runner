@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: uscis-nodejs-app
+    ports:
+      - '${PORT}:${PORT}'
+    env_file:
+      - .env
+    depends_on:
+      - mysql
+    volumes:
+      - .:/usr/src/app
+    restart: always
+
+  mysql:
+    image: mysql:8.0
+    container_name: uscis-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - '3307:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d # init data
+    restart: always
+
+  adminer:
+    image: adminer
+    container_name: uscis-adminer
+    restart: always
+    ports:
+      - '8081:8080'
+
+volumes:
+  mysql_data:

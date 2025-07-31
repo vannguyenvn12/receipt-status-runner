@@ -1,0 +1,5 @@
+docker-compose up --build -d # build
+docker-compose down -v # xóa toàn bộ
+docker-compose down # chỉ dừng
+docker-compose start # start lại
+docker logs -f uscis-nodejs-app # check log
