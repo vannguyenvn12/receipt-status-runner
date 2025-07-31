@@ -1,4 +1,4 @@
-docker-compose up --build -d # build
+docker-compose up --build -d # build & run
 docker-compose down -v # xóa toàn bộ
 docker-compose down # chỉ dừng
 docker-compose start # start lại
