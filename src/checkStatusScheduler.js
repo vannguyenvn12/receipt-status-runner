@@ -119,7 +119,7 @@ async function checkUSCISUpdates() {
       }
 
       // Nghỉ 2.5s để tránh overload server/API
-      await sleep(2500);
+      await sleep(3000);
     }
   } catch (err) {
     console.error('❌ Lỗi hệ thống:', err.message);
