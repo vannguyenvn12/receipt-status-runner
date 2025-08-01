@@ -129,6 +129,12 @@ async function insertEmailToDB(parsed) {
         continue;
       }
 
+      console.log(
+        '*** [3. CHECK STATUS INFO > FINAL] ',
+        statusInfo.action_desc
+      );
+      console.log('--------------------------------');
+
       const [[map]] = await pool.query(
         `SELECT vietnamese_status FROM setting_uscis_phase_group WHERE english_status = ?`,
         [statusInfo.status_en]
@@ -168,9 +174,15 @@ async function insertEmailToDB(parsed) {
       const conn2 = await pool.getConnection();
       await conn2.execute(
         `UPDATE uscis 
-           SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW() 
+           SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), response_json = ?
            WHERE receipt_number = ?`,
-        [statusInfo.action_desc, statusInfo.status_en, status_vi, receipt]
+        [
+          statusInfo.action_desc,
+          statusInfo.status_en,
+          status_vi,
+          receipt,
+          statusInfo.raw_response,
+        ]
       );
       conn2.release();
 

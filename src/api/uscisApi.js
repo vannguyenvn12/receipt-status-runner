@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// Trích ngày notice
+// Trích ngày notice từ mô tả
 function extractNoticeDate(text) {
   const match = text.match(/(?:on|as of) (\w+ \d{1,2}, \d{4})/i);
   if (!match) return null;
@@ -8,10 +8,6 @@ function extractNoticeDate(text) {
   const [_, dateStr] = match;
 
   try {
-    const dateObj = new Date(Date.parse(dateStr)); // hoặc: new Date(dateStr)
-    if (isNaN(dateObj)) return null;
-
-    // Tách ngày thủ công để bỏ ảnh hưởng timezone
     const [monthName, day, year] = dateStr.split(/[\s,]+/);
     const months = {
       January: 0,
@@ -31,7 +27,6 @@ function extractNoticeDate(text) {
     const utcDate = new Date(
       Date.UTC(parseInt(year), months[monthName], parseInt(day))
     );
-
     return utcDate.toISOString().split('T')[0]; // YYYY-MM-DD
   } catch {
     return null;
@@ -43,7 +38,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Hàm gọi API USCIS có retry nếu nội dung rỗng
+// Gọi USCIS API có kiểm tra receipt trong action_desc
 async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
   let attempts = 0;
 
@@ -63,12 +58,12 @@ async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
 
       const content = response.data?.trim();
 
-      // Nếu server yêu cầu đợi chút
+      // Server trả về 'doi_chut' → đợi
       if (content === 'doi_chut') {
         return { wait: true };
       }
 
-      // Nếu không có nội dung
+      // Không có dữ liệu
       if (!content) {
         console.warn(
           `⚠️ Dữ liệu rỗng, thử lại lần ${attempts}/${maxRetries}...`
@@ -89,13 +84,34 @@ async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
       const parsed = JSON.parse(lines[1].slice(2));
       const caseData = parsed.data.CaseStatusResponse;
 
-      const status_en = caseData.detailsEng.actionCodeText;
+      const receiptFromResponse = caseData.receiptNumber?.trim();
       const action_desc = caseData.detailsEng.actionCodeDesc;
+      const status_en = caseData.detailsEng.actionCodeText;
       const form_info = `${caseData.detailsEng.formNum} - ${caseData.detailsEng.formTitle}`;
       const notice_date = extractNoticeDate(action_desc);
 
+      // ✅ Kiểm tra Receipt Number trong mô tả
+      const matchReceiptInText = action_desc.match(/Receipt Number (\w+)/i);
+      const receiptInText = matchReceiptInText?.[1]?.trim();
+
+      console.log(
+        '✅ Check receipt sau khi trích xuất từ action_desc: ',
+        receiptInText
+      );
+
+      if (receiptInText && receiptInText !== receiptFromResponse) {
+        console.warn(
+          `🚨 Receipt KHÔNG KHỚP: API trả ${receiptFromResponse}, mô tả ghi ${receiptInText}. Thử lại lần ${attempts}/${maxRetries}...`
+        );
+        await sleep(delayMs);
+        continue;
+      }
+
+      console.log('*** 1.[uscisApi.js]:', action_desc);
+      console.log('--------------------------------');
+
       return {
-        receipt_number: caseData.receiptNumber,
+        receipt_number: receiptFromResponse,
         action_desc,
         status_en,
         form_info,
