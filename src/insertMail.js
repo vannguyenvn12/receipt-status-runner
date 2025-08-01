@@ -3,6 +3,8 @@ const getReceiptByEmail = require('./functions/getReceiptByEmail');
 const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
 
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
 function extractForwardedRecipient(emailBody) {
   const matches = emailBody.match(/Đến:\s.*<([^>\n\r]+)>/gim);
   if (!matches || matches.length === 0) return null;
@@ -172,7 +174,7 @@ async function insertEmailToDB(parsed) {
       );
 
       const conn2 = await pool.getConnection();
-      await conn2.execute(
+      const [result] = await conn2.execute(
         `UPDATE uscis 
            SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), response_json = ?
            WHERE receipt_number = ?`,
@@ -180,11 +182,12 @@ async function insertEmailToDB(parsed) {
           statusInfo.action_desc,
           statusInfo.status_en,
           status_vi,
-          receipt,
           statusInfo.raw_response,
+          receipt,
         ]
       );
       conn2.release();
+      console.log('✔ Rows affected:', result.affectedRows);
 
       await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
@@ -200,6 +203,8 @@ async function insertEmailToDB(parsed) {
       console.log(
         `✅ USCIS status updated for ${receipt} → ${statusInfo.status_en} / ${status_vi}`
       );
+
+      await sleep(2500);
     }
   } catch (err) {
     console.error('❌ Error inserting email:', err);

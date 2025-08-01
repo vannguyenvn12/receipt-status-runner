@@ -6,7 +6,6 @@ function extractNoticeDate(text) {
   if (!match) return null;
 
   const [_, dateStr] = match;
-
   try {
     const [monthName, day, year] = dateStr.split(/[\s,]+/);
     const months = {
@@ -23,50 +22,52 @@ function extractNoticeDate(text) {
       November: 10,
       December: 11,
     };
-
-    const utcDate = new Date(
-      Date.UTC(parseInt(year), months[monthName], parseInt(day))
-    );
-    return utcDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    const utcDate = new Date(Date.UTC(+year, months[monthName], +day));
+    return utcDate.toISOString().split('T')[0];
   } catch {
     return null;
   }
 }
 
-// Hàm delay
+// Delay
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Gọi USCIS API có kiểm tra receipt trong action_desc
-async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
-  let attempts = 0;
+// Gọi USCIS API có kiểm soát retry tách biệt
+async function callUscisApi(
+  receiptNumber,
+  maxCommonRetries = 10,
+  maxMismatchRetries = 10,
+  delayMs = 1000
+) {
+  let commonAttempts = 0;
+  let mismatchCount = 0;
 
-  while (attempts < maxRetries) {
-    attempts++;
-
+  while (
+    commonAttempts < maxCommonRetries &&
+    mismatchCount < maxMismatchRetries
+  ) {
     try {
       const response = await axios.post(
         process.env.BACKEND_URL,
         { receiptNumber },
         {
-          headers: {
-            'v-api-key': process.env.API_KEY,
-          },
+          headers: { 'v-api-key': process.env.API_KEY },
         }
       );
 
       const content = response.data?.trim();
 
-      // Server trả về 'doi_chut' → đợi
       if (content === 'doi_chut') {
         return { wait: true };
       }
 
-      // Không có dữ liệu
+      // Dữ liệu rỗng
       if (!content) {
+        commonAttempts++;
         console.warn(
-          `⚠️ Dữ liệu rỗng, thử lại lần ${attempts}/${maxRetries}...`
+          `⚠️ Dữ liệu rỗng. Retry ${commonAttempts}/${maxCommonRetries}`
         );
         await sleep(delayMs);
         continue;
@@ -74,34 +75,43 @@ async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
 
       const lines = content.split('\n');
       if (!lines[1] || !lines[1].startsWith('1:')) {
+        commonAttempts++;
         console.warn(
-          `⚠️ Dữ liệu không hợp lệ, thử lại lần ${attempts}/${maxRetries}...`
+          `⚠️ Dữ liệu không hợp lệ. Retry ${commonAttempts}/${maxCommonRetries}`
         );
         await sleep(delayMs);
         continue;
       }
 
-      const parsed = JSON.parse(lines[1].slice(2));
-      const caseData = parsed.data.CaseStatusResponse;
+      let parsed;
+      try {
+        parsed = JSON.parse(lines[1].slice(2));
+      } catch (err) {
+        commonAttempts++;
+        console.warn(
+          `❌ JSON parse lỗi. Retry ${commonAttempts}/${maxCommonRetries}`
+        );
+        await sleep(delayMs);
+        continue;
+      }
 
+      const caseData = parsed.data.CaseStatusResponse;
       const receiptFromResponse = caseData.receiptNumber?.trim();
       const action_desc = caseData.detailsEng.actionCodeDesc;
       const status_en = caseData.detailsEng.actionCodeText;
       const form_info = `${caseData.detailsEng.formNum} - ${caseData.detailsEng.formTitle}`;
       const notice_date = extractNoticeDate(action_desc);
 
-      // ✅ Kiểm tra Receipt Number trong mô tả
+      // ✅ Kiểm tra receipt trong action_desc
       const matchReceiptInText = action_desc.match(/Receipt Number (\w+)/i);
       const receiptInText = matchReceiptInText?.[1]?.trim();
 
-      console.log(
-        '✅ Check receipt sau khi trích xuất từ action_desc: ',
-        receiptInText
-      );
+      console.log('✅ Check receipt trong action_desc:', receiptInText);
 
-      if (receiptInText && receiptInText !== receiptFromResponse) {
+      if (receiptInText && receiptInText !== receiptNumber) {
+        mismatchCount++;
         console.warn(
-          `🚨 Receipt KHÔNG KHỚP: API trả ${receiptFromResponse}, mô tả ghi ${receiptInText}. Thử lại lần ${attempts}/${maxRetries}...`
+          `🚨 Receipt KHÔNG KHỚP: API=${receiptNumber}, mô tả=${receiptInText}. Mismatch ${mismatchCount}/${maxMismatchRetries}`
         );
         await sleep(delayMs);
         continue;
@@ -119,16 +129,22 @@ async function callUscisApi(receiptNumber, maxRetries = 10, delayMs = 1000) {
         raw: parsed,
       };
     } catch (err) {
+      commonAttempts++;
       console.error(
-        `❌ Lỗi API ở lần ${attempts}/${maxRetries}: ${err.message}`
+        `❌ Lỗi hệ thống: ${err.message}. Retry ${commonAttempts}/${maxCommonRetries}`
       );
       await sleep(delayMs);
     }
   }
 
+  const reason =
+    mismatchCount >= maxMismatchRetries
+      ? 'Lỗi mismatch nhiều lần'
+      : 'Lỗi hệ thống hoặc dữ liệu quá nhiều lần';
+
   return {
     error: true,
-    message: `Gọi API thất bại sau ${maxRetries} lần.`,
+    message: `Gọi API thất bại (${reason})`,
   };
 }
 
