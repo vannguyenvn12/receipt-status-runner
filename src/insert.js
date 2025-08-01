@@ -2,104 +2,120 @@ const xlsx = require('xlsx');
 const db = require('./db/db');
 const { callUscisApi } = require('./api/uscisApi');
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
+  // 1. Đọc Excel
   const workbook = xlsx.readFile('./data/blank_receipe_number.xlsx');
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const data = xlsx.utils.sheet_to_json(sheet);
+  const rawData = xlsx.utils.sheet_to_json(sheet);
 
-  const [mappingRows] = await db.query(
-    `SELECT english_status, vietnamese_status FROM setting_uscis_phase_group`
+  // 2. Map trạng thái EN → VI
+  const [mappingRows] = await db.query(`
+    SELECT english_status, vietnamese_status 
+    FROM setting_uscis_phase_group
+  `);
+
+  const statusMap = Object.fromEntries(
+    mappingRows.map(({ english_status, vietnamese_status }) => [
+      english_status,
+      vietnamese_status,
+    ])
   );
 
-  const statusMap = {};
-  mappingRows.forEach((row) => {
-    statusMap[row.english_status] = row.vietnamese_status;
-  });
+  // 3. Duyệt từng dòng
+  for (let index = 0; index < rawData.length; index++) {
+    const excelRow = rawData[index];
 
-  for (let i = 0; i < data.length; i++) {
-    const receiptNumber = data[i]['Receipt Number'];
-    const emailSheet = data[i]['Email'];
+    const receiptNumber = excelRow['Receipt Number']
+      ?.toString()
+      .trim()
+      .toUpperCase();
+    const email = excelRow['Email']?.toString().trim();
 
-    let result;
-    let retryCount = 0;
-
-    while (retryCount < 3) {
-      result = await callUscisApi(receiptNumber);
-
-      if (result.wait) {
-        console.log(`⏸ Server báo đợi (${receiptNumber}), tạm nghỉ 1 phút...`);
-        await sleep(60 * 1000);
-        retryCount++;
-        continue;
-      }
-
-      break; // Thoát vòng lặp nếu không phải "wait"
-    }
-
-    // Nếu retry quá 3 lần mà vẫn chưa được thì bỏ qua
-    if (!result || result.wait || result.invalid || result.error) {
-      console.error(`❌ Bỏ qua ${receiptNumber} sau khi thử ${retryCount} lần`);
+    // 3.1 Bỏ qua nếu thiếu
+    if (!receiptNumber || !email) {
+      console.warn(`⚠️ Dòng ${index + 2} thiếu dữ liệu, bỏ qua`);
       continue;
     }
 
-    const status_vi = statusMap[result.status_en] || null;
-
-    const row = {
-      receipt_number: result.receipt_number,
-      email: emailSheet,
-      updated_at: new Date(),
-      action_desc: result.action_desc,
-      status_en: result.status_en,
-      status_vi: status_vi,
-      notice_date: result.notice_date,
-      form_info: result.form_info,
-      response_json: JSON.stringify(result.raw),
-      retries: retryCount,
-      has_receipt: true,
-      status_update: false,
-    };
-
-    const values = [
-      row.receipt_number,
-      row.email,
-      row.updated_at,
-      row.action_desc,
-      row.status_en,
-      row.status_vi,
-      row.notice_date,
-      row.form_info,
-      row.response_json,
-      row.retries,
-      row.has_receipt,
-      row.status_update,
-    ];
-
-    // Kiểm tra trùng trước khi insert
-    const [existingRows] = await db.query(
-      'SELECT 1 FROM uscis WHERE receipt_number = ? LIMIT 1',
+    // 3.2 Kiểm tra tồn tại trong DB trước
+    const [existing] = await db.query(
+      `SELECT 1 FROM uscis WHERE receipt_number = ? LIMIT 1`,
       [receiptNumber]
     );
-    if (existingRows.length > 0) {
-      console.log(`⚠️ Receipt Number ${receiptNumber} đã tồn tại. Bỏ qua.`);
+
+    if (existing.length > 0) {
+      console.log(`⚠️ Receipt Number ${receiptNumber} đã tồn tại. DB đã chặn.`);
       continue;
     }
 
-    await db.query(
-      `INSERT INTO uscis (
-      receipt_number, email, updated_at, action_desc, status_en,
-      status_vi, notice_date, form_info, response_json, retries, has_receipt, status_update
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      values
-    );
+    // 3.3 Gọi API (retry tối đa 3 lần nếu server "wait")
+    let result,
+      retries = 0;
 
-    console.log(`✅ Đã lưu: ${receiptNumber}`);
+    while (retries < 3) {
+      result = await callUscisApi(receiptNumber);
+
+      if (result?.wait) {
+        console.log(`⏸ API yêu cầu đợi (${receiptNumber}), nghỉ 60s...`);
+        await sleep(60_000);
+        retries++;
+      } else {
+        break;
+      }
+    }
+
+    // 3.4 Nếu lỗi API hoặc kết quả không hợp lệ
+    if (!result || result.error || result.invalid || result.wait) {
+      console.error(`❌ Bỏ qua ${receiptNumber} sau ${retries} lần thử`);
+      continue;
+    }
+
+    const statusVi = statusMap[result.status_en] || null;
+
+    const insertValues = [
+      receiptNumber,
+      email,
+      new Date(),
+      result.action_desc,
+      result.status_en,
+      statusVi,
+      result.notice_date,
+      result.form_info,
+      JSON.stringify(result.raw),
+      retries,
+      true,
+      false,
+    ];
+
+    try {
+      await db.query(
+        `INSERT INTO uscis (
+          receipt_number, email, updated_at, action_desc, status_en,
+          status_vi, notice_date, form_info, response_json, retries, has_receipt, status_update
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        insertValues
+      );
+
+      console.log(`✅ Đã lưu: ${receiptNumber}`);
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') {
+        console.warn(`⚠️ Trùng key khi insert ${receiptNumber}, DB đã chặn`);
+      } else {
+        console.error(
+          `💥 Lỗi không mong muốn khi insert ${receiptNumber}:`,
+          err.message
+        );
+      }
+    }
+
+    // 3.5 Nghỉ nhẹ sau mỗi lần gọi
+    await sleep(1500);
   }
 
-  process.exit();
+  console.log('🎉 Xong toàn bộ!');
+  process.exit(0);
 }
 
 main();

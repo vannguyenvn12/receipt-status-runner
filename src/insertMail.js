@@ -205,6 +205,7 @@ async function insertEmailToDB(parsed) {
       receipt,
       content: statusInfo.action_desc,
       email: recipient_email,
+      formInfo: statusInfo.form_info,
       bodyDate,
       status_en: statusInfo.status_en,
       status_vi,
