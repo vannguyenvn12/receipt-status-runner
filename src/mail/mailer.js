@@ -27,7 +27,7 @@ async function sendStatusUpdateMail({
         <p>📬 <strong>Receipt Number:</strong> ${receipt}</p>
         <p>📧 <strong>Email:</strong> ${email}</p>
         <p>📄 <strong>Trạng thái:</strong> ${status_en} — ${status_vi}</p>
-        <p>⏰ <em>Thời gian:</em> ${bodyDate}</p>
+        <p>⏰ <em>Thời gian cập nhật:</em> ${bodyDate}</p>
         <p>📝 <strong>Nội dung:</strong> ${content}</p>
         `,
   };
