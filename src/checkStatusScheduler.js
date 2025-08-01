@@ -1,5 +1,6 @@
 const db = require('./db/db');
 const { callUscisApi } = require('./api/uscisApi');
+const sendStatusUpdateMail = require('./mail/mailer');
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -45,7 +46,7 @@ async function checkUSCISUpdates() {
             break;
           }
 
-          break; // Thoát retry nếu gọi OK
+          break;
         }
 
         if (!result || result.wait || result.error || !result.status_en) {
@@ -56,7 +57,6 @@ async function checkUSCISUpdates() {
         const newStatusEn = result.status_en;
         const newActionDesc = result.action_desc;
 
-        // Nếu không thay đổi trạng thái
         if (newStatusEn === row.status_en) {
           await db.query(
             `UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`,
@@ -66,14 +66,13 @@ async function checkUSCISUpdates() {
           continue;
         }
 
-        // Trạng thái thay đổi → lấy status_vi
         const [[map]] = await db.query(
           `SELECT vietnamese_status FROM setting_uscis_phase_group WHERE english_status = ?`,
           [newStatusEn]
         );
         const newStatusVi = map?.vietnamese_status || null;
 
-        // Lưu vào log
+        // Ghi log trước khi update
         await db.query(
           `INSERT INTO status_log (
             receipt_number, email, updated_at_log, updated_at_status,
@@ -95,7 +94,7 @@ async function checkUSCISUpdates() {
           ]
         );
 
-        // Cập nhật dòng chính
+        // Cập nhật trạng thái mới
         await db.query(
           `UPDATE uscis SET
             status_en = ?, status_vi = ?, action_desc = ?,
@@ -114,12 +113,27 @@ async function checkUSCISUpdates() {
         );
 
         console.log(`✅ Cập nhật: ${row.receipt_number} → ${newStatusEn}`);
+
+        // Gửi email nếu có thay đổi
+        await sendStatusUpdateMail({
+          to: process.env.MAIL_NOTIFY,
+          receipt: row.receipt_number,
+          content: newActionDesc,
+          email: row.email || 'Không có email',
+          formInfo: result.form_info,
+          bodyDate: new Date().toISOString(),
+          status_en: newStatusEn,
+          status_vi: newStatusVi,
+        });
+
+        console.log(
+          `📧 Đã gửi email thông báo cho ${row.email || 'MAIL_NOTIFY'}`
+        );
       } catch (err) {
         console.error(`💥 Lỗi xử lý ${row.receipt_number}:`, err.message);
       }
 
-      // Nghỉ 2.5s để tránh overload server/API
-      await sleep(3000);
+      await sleep(10000);
     }
   } catch (err) {
     console.error('❌ Lỗi hệ thống:', err.message);

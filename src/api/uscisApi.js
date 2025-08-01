@@ -2,12 +2,40 @@ const axios = require('axios');
 
 // Trích ngày notice
 function extractNoticeDate(text) {
-  const match = text.match(/on (\w+ \d{1,2}, \d{4})/i);
-  if (match) {
-    const d = new Date(match[1]);
-    return isNaN(d) ? null : d.toISOString().split('T')[0];
+  const match = text.match(/(?:on|as of) (\w+ \d{1,2}, \d{4})/i);
+  if (!match) return null;
+
+  const [_, dateStr] = match;
+
+  try {
+    const dateObj = new Date(Date.parse(dateStr)); // hoặc: new Date(dateStr)
+    if (isNaN(dateObj)) return null;
+
+    // Tách ngày thủ công để bỏ ảnh hưởng timezone
+    const [monthName, day, year] = dateStr.split(/[\s,]+/);
+    const months = {
+      January: 0,
+      February: 1,
+      March: 2,
+      April: 3,
+      May: 4,
+      June: 5,
+      July: 6,
+      August: 7,
+      September: 8,
+      October: 9,
+      November: 10,
+      December: 11,
+    };
+
+    const utcDate = new Date(
+      Date.UTC(parseInt(year), months[monthName], parseInt(day))
+    );
+
+    return utcDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  } catch {
+    return null;
   }
-  return null;
 }
 
 // Hàm delay
