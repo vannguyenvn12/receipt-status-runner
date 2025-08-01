@@ -16,6 +16,16 @@ function extractForwardedRecipient(emailBody) {
   return email?.trim() || null;
 }
 
+/**
+ * Trích xuất ngày giờ từ dòng chứa "Đã gửi:" trong nội dung email
+ * @param {string} emailText - Nội dung email dạng text
+ * @returns {string|null} - Chuỗi ngày giờ nếu tìm thấy, hoặc null nếu không có
+ */
+function extractSentDate(emailText) {
+  const match = emailText.match(/Đã gửi:\s*(.+)/i);
+  return match ? match[1].trim() : null;
+}
+
 function extractForwardedData(body) {
   const lines = body.split('\n').map((line) => line.trim());
   const fromLine = lines.find((line) => line.startsWith('Từ:'));
@@ -70,6 +80,8 @@ async function insertEmailToDB(parsed) {
   const { sent_time_raw } = extractForwardedData(email_body);
   const { sender_email, recipient_email } =
     extractForwardedDataAndRecipient(email_body);
+
+  const bodyDate = extractSentDate(email_body);
 
   console.log('*** CHECK EMAIL', {
     receiverAddress,
@@ -186,11 +198,14 @@ async function insertEmailToDB(parsed) {
     );
     conn2.release();
 
+    console.log('Fix', statusInfo.action_desc);
+
     await sendStatusUpdateMail({
       to: process.env.MAIL_NOTIFY,
       receipt,
       content: statusInfo.action_desc,
       email: recipient_email,
+      bodyDate,
       status_en: statusInfo.status_en,
       status_vi,
     });

@@ -17,21 +17,18 @@ async function sendStatusUpdateMail({
   status_vi,
   content,
   email,
+  bodyDate,
 }) {
-  const timeVN = new Date().toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-  });
-
   const mailOptions = {
     from: `"USCIS Notification" <${process.env.MY_MAIL_USER}>`,
     to,
     subject: `📬 USCIS Update: ${receipt}`,
     html: `
         <p>📬 <strong>Receipt Number:</strong> ${receipt}</p>
-        <p>📄 <strong>Trạng thái:</strong> ${status_en} — ${status_vi}</p>
-        <p>📝 <strong>Nội dung:</strong> ${content}</p>
         <p>📧 <strong>Email:</strong> ${email}</p>
-        <p>⏰ <em>Thời gian:</em> ${timeVN}</p>
+        <p>📄 <strong>Trạng thái:</strong> ${status_en} — ${status_vi}</p>
+        <p>⏰ <em>Thời gian:</em> ${bodyDate}</p>
+        <p>📝 <strong>Nội dung:</strong> ${content}</p>
         `,
   };
 
