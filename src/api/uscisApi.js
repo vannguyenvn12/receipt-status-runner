@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Trích ngày notice từ mô tả
 function extractNoticeDate(text) {
-  const match = text.match(/(?:on|as of) (\w+ \d{1,2}, \d{4})/i);
+  const match = text.match(/\b(?:on|as of|by)\s+([A-Z][a-z]+ \d{1,2}, \d{4})/i);
   if (!match) return null;
 
   const [_, dateStr] = match;
@@ -105,6 +105,9 @@ async function callUscisApi(
       // ✅ Kiểm tra receipt trong action_desc
       const matchReceiptInText = action_desc.match(/Receipt Number (\w+)/i);
       const receiptInText = matchReceiptInText?.[1]?.trim();
+
+      console.log('receiptNumber', receiptNumber);
+      console.log('caseData', parsed.data);
 
       console.log('✅ Check receipt trong action_desc:', receiptInText);
 

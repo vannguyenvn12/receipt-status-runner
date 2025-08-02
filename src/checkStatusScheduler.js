@@ -63,6 +63,7 @@ async function checkUSCISUpdates() {
             [row.receipt_number]
           );
           console.log(`↪️ Không thay đổi: ${row.receipt_number}`);
+          await sleep(5000);
           continue;
         }
 
