@@ -2,6 +2,7 @@ const pool = require('./db/db');
 const getReceiptByEmail = require('./functions/getReceiptByEmail');
 const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
+const sendNoEmailStatus = require('./mail/no-mailer');
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -118,6 +119,10 @@ async function insertEmailToDB(parsed) {
     const receipts = await getReceiptByEmail(recipient_email);
     if (!receipts || receipts.length === 0) {
       console.warn(`⚠️ Không tìm thấy receipt nào cho ${recipient_email}`);
+      await sendNoEmailStatus({
+        to: process.env.MAIL_NOTIFY,
+        email: recipient_email,
+      });
       return;
     }
 
