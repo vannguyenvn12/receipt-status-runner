@@ -2,6 +2,7 @@ const Imap = require('node-imap');
 const { simpleParser } = require('mailparser');
 const insertEmailToDB = require('../insertMail');
 const isForwardedChangeEmail = require('../functions/isForwardedChangeEmail');
+const pool = require('../db/db');
 require('dotenv').config();
 
 let imap; // Global để tái sử dụng
@@ -46,6 +47,48 @@ function createImapConnection() {
           });
         });
       });
+
+      imap.search(
+        ['ALL', ['SINCE', new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)]],
+        (err, results) => {
+          if (err || !results.length) return;
+
+          const fetch = imap.fetch(results.slice(-100), {
+            bodies: '',
+            struct: true,
+          });
+
+          fetch.on('message', (msg) => {
+            msg.on('body', (stream) => {
+              simpleParser(stream, async (err, parsed) => {
+                if (err) return;
+
+                const [[existing]] = await pool.query(
+                  `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
+                  [parsed.messageId]
+                );
+                if (existing) {
+                  console.log(
+                    `⏭ [RETRY SKIP] Đã xử lý rồi: ${parsed.subject} – ${parsed.messageId}`
+                  );
+                  return;
+                }
+
+                if (isForwardedChangeEmail(parsed)) {
+                  console.log(
+                    `🔁 [RETRY PROCESS] Xử lý lại mail: ${parsed.subject} – ${parsed.messageId}`
+                  );
+                  await insertEmailToDB(parsed);
+                } else {
+                  console.log(
+                    `❌ [RETRY IGNORED] Không phải mail forward hợp lệ: ${parsed.subject}`
+                  );
+                }
+              });
+            });
+          });
+        }
+      );
     });
   });
 

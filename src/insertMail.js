@@ -60,6 +60,7 @@ async function insertEmailToDB(parsed) {
     subject,
     date,
     text: email_body,
+    messageId,
   } = parsed;
 
   const sender_match = from.match(/"?(.*?)"?\s*<(.+?)>/);
@@ -80,12 +81,13 @@ async function insertEmailToDB(parsed) {
   });
 
   const sql = `
-    INSERT INTO email_uscis 
-      (forwarded_date, sender, receiver, subject, email_body, sender_email, sent_time_raw, recipient_email)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `;
+  INSERT INTO email_uscis 
+    (message_id, forwarded_date, sender, receiver, subject, email_body, sender_email, sent_time_raw, recipient_email)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
 
   const values = [
+    messageId,
     forwarded_date,
     sender,
     receiverAddress,
@@ -95,6 +97,17 @@ async function insertEmailToDB(parsed) {
     sent_time_raw,
     recipient_email,
   ];
+
+  // ❗ Check nếu messageId đã tồn tại trong DB thì bỏ qua
+  const [[exists]] = await pool.query(
+    `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
+    [messageId]
+  );
+
+  if (exists) {
+    console.log(`⚠️ Đã xử lý email có messageId: ${messageId}, bỏ qua.`);
+    return;
+  }
 
   try {
     const conn = await pool.getConnection();
