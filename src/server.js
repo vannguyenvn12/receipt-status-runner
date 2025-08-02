@@ -1,12 +1,14 @@
 const express = require('express');
 const app = express();
 require('dotenv').config();
-const axios = require('axios');
+const uscisRoutes = require('./routes/uscis');
 
 app.use(express.json({ limit: '10mb' })); // tăng limit nếu cần
 
 require('./mail'); // 👈 Gọi mail listener (imap)
 require('./scheduler'); // 👈 Chạy định kỳ
+
+app.use('/api/uscis', uscisRoutes);
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;
