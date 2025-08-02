@@ -162,33 +162,48 @@ async function insertEmailToDB(parsed) {
       const status_vi = map?.vietnamese_status || null;
 
       const [[currentData]] = await pool.query(
-        `SELECT action_desc, status_en, status_vi, notice_date, response_json, has_receipt, retries, form_info 
+        `SELECT action_desc, status_en, status_vi, notice_date, response_json, has_receipt, retries, form_info , updated_at
          FROM uscis 
          WHERE receipt_number = ?`,
         [receipt]
       );
 
       const logValuesBeforeUpdate = [
-        receipt,
-        recipient_email,
-        currentData?.action_desc ?? null,
-        currentData?.status_en ?? null,
-        currentData?.status_vi ?? null,
-        currentData?.notice_date ?? null,
-        currentData?.response_json ?? null,
-        currentData?.has_receipt ?? null,
-        currentData?.retries ?? null,
-        currentData?.form_info ?? null,
+        receipt, // 1: receipt_number
+        recipient_email, // 2: email
+        currentData?.action_desc ?? null, // 3: action_desc
+        currentData?.status_en ?? null, // 4: status_en
+        currentData?.status_vi ?? null, // 5: status_vi
+        currentData?.notice_date ?? null, // 6: notice_date
+        currentData?.response_json ?? null, // 7: response_json
+        currentData?.has_receipt ?? null, // 8: has_receipt
+        currentData?.retries ?? null, // 9: retries
+        currentData?.form_info ?? null, // 10: form_info
       ].map((v) => (v === undefined ? null : v));
 
       await pool.query(
         `INSERT INTO status_log (
-           updated_at_log, receipt_number, email, updated_at_status,
-           action_desc, status_en, status_vi, notice_date, response_json,
-           has_receipt, retries, form_info, is_log_email
-         )
-         VALUES (NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        logValuesBeforeUpdate
+        updated_at_log,
+        receipt_number,
+        email,
+        updated_at_status,
+        action_desc,
+        status_en,
+        status_vi,
+        notice_date,
+        response_json,
+        has_receipt,
+        retries,
+        form_info,
+        is_log_email
+      )
+   VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          logValuesBeforeUpdate[0], // receipt_number
+          logValuesBeforeUpdate[1], // email
+          currentData?.updated_at ?? null, // updated_at_status ← thêm giá trị cũ tại đây
+          ...logValuesBeforeUpdate.slice(2), // còn lại đúng thứ tự
+        ]
       );
 
       const conn2 = await pool.getConnection();
