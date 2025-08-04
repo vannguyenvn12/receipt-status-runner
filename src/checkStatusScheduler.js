@@ -1,6 +1,7 @@
 const db = require('./db/db');
 const { callUscisApi } = require('./api/uscisApi');
 const sendStatusUpdateMail = require('./mail/mailer');
+const { toSQLDateTime, toVietnameseDateString } = require('./utils/day');
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -95,17 +96,20 @@ async function checkUSCISUpdates() {
           ]
         );
 
+        const date = new Date().toISOString();
+
         // Cập nhật trạng thái mới
         await db.query(
           `UPDATE uscis SET
             status_en = ?, status_vi = ?, action_desc = ?,
-            updated_at = NOW(), notice_date = ?, form_info = ?,
+            updated_at = NOW(), updated_status_at = ?, notice_date = ?, form_info = ?,
             response_json = ?, retries = 0, status_update = TRUE
           WHERE receipt_number = ?`,
           [
             newStatusEn,
             newStatusVi,
             newActionDesc,
+            toSQLDateTime(date),
             result.notice_date,
             result.form_info,
             JSON.stringify(result.raw),
@@ -122,7 +126,7 @@ async function checkUSCISUpdates() {
           content: newActionDesc,
           email: row.email || 'Không có email',
           formInfo: result.form_info,
-          bodyDate: new Date().toISOString(),
+          bodyDate: toVietnameseDateString(date),
           status_en: newStatusEn,
           status_vi: newStatusVi,
         });

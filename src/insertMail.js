@@ -3,6 +3,7 @@ const getReceiptByEmail = require('./functions/getReceiptByEmail');
 const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
 const sendNoEmailStatus = require('./mail/no-mailer');
+const { convertVietnameseDateToSQL } = require('./utils/day');
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -75,6 +76,8 @@ async function insertEmailToDB(parsed) {
     extractForwardedDataAndRecipient(email_body);
 
   const bodyDate = extractSentDate(email_body);
+  const sqlDate = convertVietnameseDateToSQL(bodyDate);
+  console.log('*** CHECK SQLDATE', sqlDate);
 
   console.log('*** CHECK EMAIL', {
     receiverAddress,
@@ -117,6 +120,9 @@ async function insertEmailToDB(parsed) {
     console.log('✅ Email inserted into database');
 
     const receipts = await getReceiptByEmail(recipient_email);
+    console.log('recipient_email', recipient_email);
+    console.log('recipient_email', receipts.length);
+
     if (!receipts || receipts.length === 0) {
       console.warn(`⚠️ Không tìm thấy receipt nào cho ${recipient_email}`);
       await sendNoEmailStatus({
@@ -209,12 +215,13 @@ async function insertEmailToDB(parsed) {
       const conn2 = await pool.getConnection();
       const [result] = await conn2.execute(
         `UPDATE uscis 
-           SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), response_json = ?
+           SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?
            WHERE receipt_number = ?`,
         [
           statusInfo.action_desc,
           statusInfo.status_en,
           status_vi,
+          sqlDate,
           statusInfo.raw_response,
           receipt,
         ]
