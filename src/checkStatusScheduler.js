@@ -145,7 +145,7 @@ async function checkUSCISUpdates() {
         );
       }
 
-      await sleep(10000);
+      await sleep(5000);
     }
   } catch (err) {
     console.error('❌ [Định kỳ]: Lỗi hệ thống:', err.message);
