@@ -10,6 +10,10 @@ require('./scheduler'); // 👈 Chạy định kỳ
 
 app.use('/api/uscis', uscisRoutes);
 
+app.get('/', (req, res) => {
+  res.json({ msg: 'ok' });
+});
+
 // Khởi động server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
