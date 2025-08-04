@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const checkUSCISUpdates = require('./checkStatusScheduler');
+const { retryProcessEmails, imap } = require('./mail');
 
 console.log('Chạy định kỳ');
 
@@ -21,4 +22,15 @@ cron.schedule('*/30 * * * *', async () => {
   } finally {
     isRunning = false;
   }
+});
+
+// Chạy mỗi 30 phút
+cron.schedule('*/30 * * * *', () => {
+  if (!imap || !imap.state || imap.state !== 'authenticated') {
+    console.log('⚠️ IMAP chưa kết nối, bỏ qua retry');
+    return;
+  }
+
+  console.log('⏰ Bắt đầu phiên EMAIL');
+  retryProcessEmails();
 });
