@@ -8,6 +8,8 @@ dayjs.extend(customParseFormat);
  * @returns {string|null} Chuỗi định dạng SQL hoặc null nếu lỗi
  */
 function convertVietnameseDateToSQL(input) {
+  if (!input) return;
+
   const vietnameseMonths = {
     'Tháng Giêng': 1,
     'Tháng Một': 1,
@@ -51,6 +53,8 @@ function convertVietnameseDateToSQL(input) {
 }
 
 function toVietnameseDateString(date) {
+  if (!date) return;
+
   const vietnameseMonths = [
     'Tháng Giêng',
     'Tháng Hai',
@@ -81,6 +85,8 @@ function toVietnameseDateString(date) {
 }
 
 function toSQLDateTime(date) {
+  if (!date) return;
+
   const d = new Date(date); // input là ISO string
 
   const yyyy = d.getFullYear();

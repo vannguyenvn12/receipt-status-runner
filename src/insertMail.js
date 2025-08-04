@@ -174,21 +174,32 @@ async function insertEmailToDB(parsed) {
         [receipt]
       );
 
-      const logValuesBeforeUpdate = [
-        receipt, // 1: receipt_number
-        recipient_email, // 2: email
-        currentData?.action_desc ?? null, // 3: action_desc
-        currentData?.status_en ?? null, // 4: status_en
-        currentData?.status_vi ?? null, // 5: status_vi
-        currentData?.notice_date ?? null, // 6: notice_date
-        currentData?.response_json ?? null, // 7: response_json
-        currentData?.has_receipt ?? null, // 8: has_receipt
-        currentData?.retries ?? null, // 9: retries
-        currentData?.form_info ?? null, // 10: form_info
-      ].map((v) => (v === undefined ? null : v));
+      const hasChanged =
+        statusInfo.status_en !== currentData.status_en ||
+        statusInfo.action_desc !== currentData.action_desc;
 
-      await pool.query(
-        `INSERT INTO status_log (
+      const updatedStatusAt = hasChanged
+        ? new Date()
+        : currentData.updated_status_at ?? null;
+
+      console.log('*** hasChanged', hasChanged);
+
+      if (hasChanged) {
+        const logValuesBeforeUpdate = [
+          receipt, // 1: receipt_number
+          recipient_email, // 2: email
+          currentData?.action_desc ?? null, // 3: action_desc
+          currentData?.status_en ?? null, // 4: status_en
+          currentData?.status_vi ?? null, // 5: status_vi
+          currentData?.notice_date ?? null, // 6: notice_date
+          currentData?.response_json ?? null, // 7: response_json
+          currentData?.has_receipt ?? null, // 8: has_receipt
+          currentData?.retries ?? null, // 9: retries
+          currentData?.form_info ?? null, // 10: form_info
+        ].map((v) => (v === undefined ? null : v));
+
+        await pool.query(
+          `INSERT INTO status_log (
         updated_at_log,
         receipt_number,
         email,
@@ -204,13 +215,23 @@ async function insertEmailToDB(parsed) {
         is_log_email
       )
    VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        [
-          logValuesBeforeUpdate[0], // receipt_number
-          logValuesBeforeUpdate[1], // email
-          currentData?.updated_at ?? null, // updated_at_status ← thêm giá trị cũ tại đây
-          ...logValuesBeforeUpdate.slice(2), // còn lại đúng thứ tự
-        ]
-      );
+          [
+            logValuesBeforeUpdate[0], // receipt_number
+            logValuesBeforeUpdate[1], // email
+            currentData?.updated_at ?? null, // updated_at_status ← thêm giá trị cũ tại đây
+            ...logValuesBeforeUpdate.slice(2), // còn lại đúng thứ tự
+          ]
+        );
+      }
+
+      console.log('*** DEBUG UPDATE PARAM', {
+        action_desc: statusInfo.action_desc,
+        status_en: statusInfo.status_en,
+        status_vi,
+        updatedStatusAt,
+        raw_response: statusInfo.raw_response,
+        receipt,
+      });
 
       const conn2 = await pool.getConnection();
       const [result] = await conn2.execute(
@@ -221,7 +242,7 @@ async function insertEmailToDB(parsed) {
           statusInfo.action_desc,
           statusInfo.status_en,
           status_vi,
-          sqlDate,
+          updatedStatusAt,
           statusInfo.raw_response,
           receipt,
         ]

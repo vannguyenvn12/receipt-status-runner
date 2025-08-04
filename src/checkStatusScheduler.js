@@ -63,7 +63,7 @@ async function checkUSCISUpdates() {
             `UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`,
             [row.receipt_number]
           );
-          console.log(`↪️ Không thay đổi: ${row.receipt_number}`);
+          console.log(`↪️ [Định kỳ]: Không thay đổi: ${row.receipt_number}`);
           await sleep(5000);
           continue;
         }
@@ -117,7 +117,9 @@ async function checkUSCISUpdates() {
           ]
         );
 
-        console.log(`✅ Cập nhật: ${row.receipt_number} → ${newStatusEn}`);
+        console.log(
+          `✅ [Định kỳ] Cập nhật: ${row.receipt_number} → ${newStatusEn}`
+        );
 
         // Gửi email nếu có thay đổi
         await sendStatusUpdateMail({
@@ -132,17 +134,22 @@ async function checkUSCISUpdates() {
         });
 
         console.log(
-          `📧 Đã gửi email thông báo cho ${row.email || 'MAIL_NOTIFY'}`
+          `📧 [Định kỳ]: Đã gửi email thông báo cho ${
+            row.email || 'MAIL_NOTIFY'
+          }`
         );
       } catch (err) {
-        console.error(`💥 Lỗi xử lý ${row.receipt_number}:`, err.message);
+        console.error(
+          `💥[Định kỳ]: Lỗi xử lý ${row.receipt_number}:`,
+          err.message
+        );
       }
 
       await sleep(10000);
     }
   } catch (err) {
-    console.error('❌ Lỗi hệ thống:', err.message);
+    console.error('❌ [Định kỳ]: Lỗi hệ thống:', err.message);
   }
 }
 
-checkUSCISUpdates();
+module.exports = checkUSCISUpdates;
