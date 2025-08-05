@@ -45,8 +45,10 @@ function extractForwardedDataAndRecipient(body) {
       sender_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
     }
 
-    if (!recipient_email && /^Đến:.*<.+>$/.test(line)) {
-      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    // Match "Đến: ..." hoặc "Tới: ..."
+    if (!recipient_email && /^(Đến|Tới):.*<.+?>$/.test(line)) {
+      const match = line.match(/<([^<>]+)>/);
+      if (match) recipient_email = match[1].trim();
     }
 
     if (sender_email && recipient_email) break;
