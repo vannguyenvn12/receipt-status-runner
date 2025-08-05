@@ -4,6 +4,9 @@ const getStatus = require('./functions/getStatus');
 const sendStatusUpdateMail = require('./mail/mailer');
 const sendNoEmailStatus = require('./mail/no-mailer');
 const { convertVietnameseDateToSQL } = require('./utils/day');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+dayjs.extend(utc);
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -183,17 +186,7 @@ async function insertEmailToDB(parsed) {
         statusInfo.action_desc !== currentData.action_desc;
 
       const updatedStatusAt = hasChanged
-        ? new Date(
-            Date.UTC(
-              now.getUTCFullYear(),
-              now.getUTCMonth(),
-              now.getUTCDate(),
-              now.getUTCHours(),
-              now.getUTCMinutes(),
-              now.getUTCSeconds(),
-              now.getUTCMilliseconds()
-            )
-          )
+        ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
         : currentData.updated_status_at ?? null;
 
       console.log('*** hasChanged', hasChanged);
