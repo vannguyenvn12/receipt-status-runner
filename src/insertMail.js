@@ -45,10 +45,12 @@ function extractForwardedDataAndRecipient(body) {
       sender_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
     }
 
-    // Match "Đến: ..." hoặc "Tới: ..."
-    if (!recipient_email && /^(Đến|Tới):.*<.+?>$/.test(line)) {
-      const match = line.match(/<([^<>]+)>/);
-      if (match) recipient_email = match[1].trim();
+    if (!recipient_email && /^Đến:.*<.+>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (!recipient_email && /^Tới:.*<.+?>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
     }
 
     if (sender_email && recipient_email) break;
@@ -181,7 +183,17 @@ async function insertEmailToDB(parsed) {
         statusInfo.action_desc !== currentData.action_desc;
 
       const updatedStatusAt = hasChanged
-        ? new Date()
+        ? new Date(
+            Date.UTC(
+              now.getUTCFullYear(),
+              now.getUTCMonth(),
+              now.getUTCDate(),
+              now.getUTCHours(),
+              now.getUTCMinutes(),
+              now.getUTCSeconds(),
+              now.getUTCMilliseconds()
+            )
+          )
         : currentData.updated_status_at ?? null;
 
       console.log('*** hasChanged', hasChanged);
