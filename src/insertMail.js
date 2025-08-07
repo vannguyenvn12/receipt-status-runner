@@ -140,10 +140,26 @@ async function insertEmailToDB(parsed) {
 
     if (!receipts || receipts.length === 0) {
       console.warn(`⚠️ Không tìm thấy receipt nào cho ${recipient_email}`);
-      await sendNoEmailStatus({
-        to: process.env.MAIL_NOTIFY,
-        email: recipient_email,
-      });
+
+      const [[emailRow]] = await pool.query(
+        `SELECT is_no_receipt_notified FROM email_uscis WHERE id = ?`,
+        [insertedEmailRowId]
+      );
+
+      if (emailRow && emailRow.is_no_receipt_notified !== 1) {
+        await sendNoEmailStatus({
+          to: process.env.MAIL_NOTIFY,
+          email: recipient_email,
+        });
+
+        // 🔐 Đánh dấu là đã gửi báo lỗi
+        await pool.query(
+          `UPDATE email_uscis SET is_no_receipt_notified = 1 WHERE id = ?`,
+          [insertedEmailRowId]
+        );
+      } else {
+        console.log('⏭ Đã gửi sendNoEmailStatus trước đó, bỏ qua.');
+      }
       return;
     }
 
