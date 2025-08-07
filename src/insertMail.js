@@ -56,6 +56,10 @@ function extractForwardedDataAndRecipient(body) {
       recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
     }
 
+    if (!recipient_email && /^Tới:.*<.+>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
     if (sender_email && recipient_email) break;
   }
 
@@ -94,11 +98,10 @@ async function insertEmailToDB(parsed) {
   const sql = `
   INSERT INTO email_uscis 
     (message_id, forwarded_date, sender, receiver, subject, email_body, sender_email, sent_time_raw, recipient_email)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
   const values = [
-    messageId,
     forwarded_date,
     sender,
     receiverAddress,
@@ -108,6 +111,8 @@ async function insertEmailToDB(parsed) {
     sent_time_raw,
     recipient_email,
   ];
+
+  let insertedEmailRowId = null;
 
   // ❗ Check nếu messageId đã tồn tại trong DB thì bỏ qua
   const [[exists]] = await pool.query(
@@ -122,8 +127,11 @@ async function insertEmailToDB(parsed) {
 
   try {
     const conn = await pool.getConnection();
-    await conn.execute(sql, values);
+    const [resultMail] = await conn.execute(sql, values);
+    insertedEmailRowId = resultMail.insertId;
+    console.log('insertedEmailRowId', insertedEmailRowId);
     conn.release();
+
     console.log('✅ Email inserted into database');
 
     const receipts = await getReceiptByEmail(recipient_email);
@@ -273,6 +281,22 @@ async function insertEmailToDB(parsed) {
       );
 
       await sleep(2500);
+    }
+
+    if (insertedEmailRowId) {
+      try {
+        const conn = await pool.getConnection();
+        await conn.execute(
+          `UPDATE email_uscis SET message_id = ? WHERE id = ?`,
+          [messageId, insertedEmailRowId]
+        );
+        conn.release();
+        console.log(
+          `🔄 Đã cập nhật message_id cho email_uscis ID: ${insertedEmailRowId}`
+        );
+      } catch (err) {
+        console.error('❌ Lỗi khi cập nhật messageId:', err);
+      }
     }
   } catch (err) {
     console.error('❌ Error inserting email:', err);
