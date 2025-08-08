@@ -1,10 +1,13 @@
 const cron = require('node-cron');
 const checkUSCISUpdates = require('./checkStatusScheduler');
 const { retryProcessEmails, imap } = require('./mail');
+const { handleNewReceipt } = require('./handleNewRecept');
 
 console.log('Chạy định kỳ');
 
 let isRunning = false;
+let isRunningNewReceipt = false;
+
 cron.schedule('*/30 * * * *', async () => {
   if (isRunning) {
     console.log('⚠️ Đang có phiên USCIS đang chạy → bỏ qua lần gọi này');
@@ -33,4 +36,22 @@ cron.schedule('*/30 * * * *', () => {
 
   console.log('⏰ Bắt đầu phiên EMAIL');
   retryProcessEmails();
+});
+
+// NEW RECEIPT: Chạy mỗi 15 phút
+cron.schedule('*/15 * * * *', async () => {
+  if (isRunningNewReceipt) {
+    console.log('⚠️ Đang có phiên NEW RECEIPT đang chạy → bỏ qua lần gọi này');
+    return;
+  }
+  isRunningNewReceipt = true;
+  console.log('⏰ Bắt đầu phiên NEW RECEIPT');
+  try {
+    await handleNewReceipt(); // gọi hàm main() trong handleNewReceipt.js
+    console.log('✅ Hoàn tất phiên NEW RECEIPT');
+  } catch (err) {
+    console.error('💥 Lỗi trong NEW RECEIPT:', err.message);
+  } finally {
+    isRunningNewReceipt = false;
+  }
 });
