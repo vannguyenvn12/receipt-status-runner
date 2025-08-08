@@ -239,16 +239,24 @@ async function insertEmailToDB(parsed) {
       ]
     );
 
-    await sendStatusUpdateMail({
-      to: process.env.MAIL_NOTIFY,
-      receipt,
-      content: statusInfo.action_desc,
-      email: recipient_email,
-      formInfo: statusInfo.form_info,
-      bodyDate,
-      status_en: statusInfo.status_en,
-      status_vi,
-    });
+    // 🔔 Chỉ gửi email khi thực sự có thay đổi
+    if (hasChanged) {
+      await sendStatusUpdateMail({
+        to: process.env.MAIL_NOTIFY,
+        receipt,
+        content: statusInfo.action_desc,
+        email: recipient_email,
+        formInfo: statusInfo.form_info,
+        bodyDate,
+        status_en: statusInfo.status_en,
+        status_vi,
+      });
+      console.log(`📧 Đã gửi mail cập nhật cho ${receipt}`);
+    } else {
+      console.log(
+        `⏭ Không thay đổi trạng thái cho ${receipt} → không gửi mail`
+      );
+    }
 
     console.log(`✅ Cập nhật trạng thái ${receipt}: ${status_vi}`);
     await sleep(2500);
