@@ -1,71 +1,3 @@
-const pool = require('./db/db');
-const getReceiptByEmail = require('./functions/getReceiptByEmail');
-const getStatus = require('./functions/getStatus');
-const sendStatusUpdateMail = require('./mail/mailer');
-const sendNoEmailStatus = require('./mail/no-mailer');
-const { convertVietnameseDateToSQL } = require('./utils/day');
-const dayjs = require('dayjs');
-const utc = require('dayjs/plugin/utc');
-dayjs.extend(utc);
-
-const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
-
-function extractForwardedRecipient(emailBody) {
-  const matches = emailBody.match(/Đến:\s.*<([^>\n\r]+)>/gim);
-  if (!matches || matches.length === 0) return null;
-
-  const lastMatch = matches[matches.length - 1];
-  const email = lastMatch.match(/<([^>\n\r]+)>/)?.[1];
-  return email?.trim() || null;
-}
-
-function extractSentDate(emailText) {
-  const match = emailText.match(/Đã gửi:\s*(.+)/i);
-  return match ? match[1].trim() : null;
-}
-
-function extractForwardedData(body) {
-  const lines = body.split('\n').map((line) => line.trim());
-  const fromLine = lines.find((line) => line.startsWith('Từ:'));
-  const dateLine = lines.find((line) => line.startsWith('Date:'));
-
-  const sender_email = fromLine?.match(/<(.+?)>/)?.[1] || null;
-  const sent_time_raw = dateLine || null;
-
-  return { sender_email, sent_time_raw };
-}
-
-function extractForwardedDataAndRecipient(body) {
-  const lines = body.split('\n').map((line) => line.trim());
-
-  let sender_email = null;
-  let recipient_email = null;
-
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i];
-
-    if (!sender_email && /^Từ:.*<.+>$/.test(line)) {
-      sender_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
-    }
-
-    if (!recipient_email && /^Đến:.*<.+>$/.test(line)) {
-      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
-    }
-
-    if (!recipient_email && /^Tới:.*<.+?>$/.test(line)) {
-      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
-    }
-
-    if (!recipient_email && /^Tới:.*<.+>$/.test(line)) {
-      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
-    }
-
-    if (sender_email && recipient_email) break;
-  }
-
-  return { sender_email, recipient_email };
-}
-
 async function insertEmailToDB(parsed) {
   const {
     from: { text: from },
@@ -78,245 +10,178 @@ async function insertEmailToDB(parsed) {
 
   const sender_match = from.match(/"?(.*?)"?\s*<(.+?)>/);
   const sender = sender_match?.[1] || null;
-  const receiver = to;
-  const receiverAddress = receiver.value?.[0]?.address || null;
-
+  const receiverAddress = to?.value?.[0]?.address || null;
   const forwarded_date = new Date(date);
+
   const { sent_time_raw } = extractForwardedData(email_body);
   const { sender_email, recipient_email } =
     extractForwardedDataAndRecipient(email_body);
-
   const bodyDate = extractSentDate(email_body);
   const sqlDate = convertVietnameseDateToSQL(bodyDate);
-  console.log('*** CHECK SQLDATE', sqlDate);
 
-  console.log('*** CHECK EMAIL', {
-    receiverAddress,
-    sender_email,
-  });
+  console.log('*** CHECK EMAIL', { receiverAddress, sender_email });
 
-  const sql = `
-  INSERT INTO email_uscis 
-    (message_id, forwarded_date, sender, receiver, subject, email_body, sender_email, sent_time_raw, recipient_email)
-  VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
+  let emailRowId = null;
 
-  const values = [
-    forwarded_date,
-    sender,
-    receiverAddress,
-    subject,
-    email_body,
-    sender_email,
-    sent_time_raw,
-    recipient_email,
-  ];
-
-  let insertedEmailRowId = null;
-
-  // ❗ Check nếu messageId đã tồn tại trong DB thì bỏ qua
-  const [[exists]] = await pool.query(
-    `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
-    [messageId]
+  // ✅ Check đã tồn tại email tương tự chưa (dù chưa có messageId)
+  const [[existingRow]] = await pool.query(
+    `SELECT id, is_no_receipt_notified FROM email_uscis 
+     WHERE subject = ? AND recipient_email = ? AND DATE(forwarded_date) = DATE(?) 
+     ORDER BY id DESC LIMIT 1`,
+    [subject, recipient_email, forwarded_date]
   );
 
-  if (exists) {
-    console.log(`⚠️ Đã xử lý email có messageId: ${messageId}, bỏ qua.`);
+  if (existingRow) {
+    console.log(`📨 Email đã tồn tại trước đó với ID: ${existingRow.id}`);
+    emailRowId = existingRow.id;
+  } else {
+    // ✅ Insert email mới
+    const [insertResult] = await pool.query(
+      `INSERT INTO email_uscis 
+       (message_id, forwarded_date, sender, receiver, subject, email_body, sender_email, sent_time_raw, recipient_email, is_no_receipt_notified)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        null,
+        forwarded_date,
+        sender,
+        receiverAddress,
+        subject,
+        email_body,
+        sender_email,
+        sent_time_raw,
+        recipient_email,
+      ]
+    );
+    emailRowId = insertResult.insertId;
+    console.log(`✅ Inserted email ID: ${emailRowId}`);
+  }
+
+  // 🔍 Lấy danh sách receipt liên kết với email
+  const receipts = await getReceiptByEmail(recipient_email);
+  console.log('📬 Receipts:', receipts);
+
+  if (!receipts || receipts.length === 0) {
+    const [[emailRow]] = await pool.query(
+      `SELECT is_no_receipt_notified FROM email_uscis WHERE id = ?`,
+      [emailRowId]
+    );
+
+    if (emailRow?.is_no_receipt_notified !== 1) {
+      await sendNoEmailStatus({
+        to: process.env.MAIL_NOTIFY,
+        email: recipient_email,
+      });
+
+      await pool.query(
+        `UPDATE email_uscis SET is_no_receipt_notified = 1 WHERE id = ?`,
+        [emailRowId]
+      );
+      console.log(`📨 Gửi cảnh báo không có receipt cho ${recipient_email}`);
+    } else {
+      console.log('⏭ Đã gửi cảnh báo trước đó, bỏ qua.');
+    }
+
     return;
   }
 
-  try {
-    const conn = await pool.getConnection();
-    const [resultMail] = await conn.execute(sql, values);
-    insertedEmailRowId = resultMail.insertId;
-    console.log('insertedEmailRowId', insertedEmailRowId);
-    conn.release();
+  // 🚀 Tiến hành xử lý từng receipt
+  for (const receipt of receipts) {
+    console.log(`📦 Đang xử lý receipt: ${receipt}`);
+    let statusInfo;
+    let retries = 0;
+    const maxRetries = 5;
 
-    console.log('✅ Email inserted into database');
+    while (retries < maxRetries) {
+      statusInfo = await getStatus(receipt);
+      if (!statusInfo.wait) break;
 
-    const receipts = await getReceiptByEmail(recipient_email);
-    console.log('recipient_email', recipient_email);
-    console.log('recipient_email', receipts.length);
-
-    if (!receipts || receipts.length === 0) {
-      console.warn(`⚠️ Không tìm thấy receipt nào cho ${recipient_email}`);
-
-      const [[emailRow]] = await pool.query(
-        `SELECT is_no_receipt_notified FROM email_uscis WHERE id = ?`,
-        [insertedEmailRowId]
-      );
-
-      if (emailRow && emailRow.is_no_receipt_notified !== 1) {
-        await sendNoEmailStatus({
-          to: process.env.MAIL_NOTIFY,
-          email: recipient_email,
-        });
-
-        // 🔐 Đánh dấu là đã gửi báo lỗi
-        await pool.query(
-          `UPDATE email_uscis SET is_no_receipt_notified = 1 WHERE id = ?`,
-          [insertedEmailRowId]
-        );
-      } else {
-        console.log('⏭ Đã gửi sendNoEmailStatus trước đó, bỏ qua.');
-      }
-      return;
+      console.log(`⏸ Retry ${retries + 1}/5... nghỉ 1 phút`);
+      await sleep(60000);
+      retries++;
     }
 
-    for (const receipt of receipts) {
-      console.log(`📦 Xử lý receipt: ${receipt}`);
+    if (statusInfo.wait || statusInfo.error || !statusInfo.status_en) {
+      console.warn(`⚠️ Không thể lấy trạng thái hợp lệ cho ${receipt}`);
+      continue;
+    }
 
-      let statusInfo;
-      let retries = 0;
-      const maxRetries = 5;
+    const [[map]] = await pool.query(
+      `SELECT vietnamese_status FROM setting_uscis_phase_group WHERE english_status = ?`,
+      [statusInfo.status_en]
+    );
+    const status_vi = map?.vietnamese_status || null;
 
-      while (retries < maxRetries) {
-        statusInfo = await getStatus(receipt);
-        if (!statusInfo.wait) break;
+    const [[currentData]] = await pool.query(
+      `SELECT action_desc, status_en, status_vi, notice_date, response_json, has_receipt, retries, form_info, updated_at, updated_status_at
+       FROM uscis WHERE receipt_number = ?`,
+      [receipt]
+    );
 
-        console.log(
-          `⏸ Đợi retry... nghỉ 1 phút cho ${receipt} (lần ${retries + 1})`
-        );
-        await new Promise((res) => setTimeout(res, 60000));
-        retries++;
-      }
+    const hasChanged =
+      statusInfo.status_en !== currentData.status_en ||
+      statusInfo.action_desc !== currentData.action_desc;
 
-      if (statusInfo.wait || statusInfo.error || !statusInfo.status_en) {
-        console.warn(`⚠️ Không thể lấy trạng thái hợp lệ cho ${receipt}`);
-        continue;
-      }
+    const updatedStatusAt = hasChanged
+      ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
+      : currentData.updated_status_at ?? null;
 
-      console.log(
-        '*** [3. CHECK STATUS INFO > FINAL] ',
-        statusInfo.action_desc
-      );
-      console.log('--------------------------------');
-
-      const [[map]] = await pool.query(
-        `SELECT vietnamese_status FROM setting_uscis_phase_group WHERE english_status = ?`,
-        [statusInfo.status_en]
-      );
-      const status_vi = map?.vietnamese_status || null;
-
-      const [[currentData]] = await pool.query(
-        `SELECT action_desc, status_en, status_vi, notice_date, response_json, has_receipt, retries, form_info , updated_at
-         FROM uscis 
-         WHERE receipt_number = ?`,
-        [receipt]
-      );
-
-      const hasChanged =
-        statusInfo.status_en !== currentData.status_en ||
-        statusInfo.action_desc !== currentData.action_desc;
-
-      const updatedStatusAt = hasChanged
-        ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
-        : currentData.updated_status_at ?? null;
-
-      console.log('*** hasChanged', hasChanged);
-
-      if (hasChanged) {
-        const logValuesBeforeUpdate = [
-          receipt, // 1: receipt_number
-          recipient_email, // 2: email
-          currentData?.action_desc ?? null, // 3: action_desc
-          currentData?.status_en ?? null, // 4: status_en
-          currentData?.status_vi ?? null, // 5: status_vi
-          currentData?.notice_date ?? null, // 6: notice_date
-          currentData?.response_json ?? null, // 7: response_json
-          currentData?.has_receipt ?? null, // 8: has_receipt
-          currentData?.retries ?? null, // 9: retries
-          currentData?.form_info ?? null, // 10: form_info
-        ].map((v) => (v === undefined ? null : v));
-
-        await pool.query(
-          `INSERT INTO status_log (
-        updated_at_log,
-        receipt_number,
-        email,
-        updated_at_status,
-        action_desc,
-        status_en,
-        status_vi,
-        notice_date,
-        response_json,
-        has_receipt,
-        retries,
-        form_info,
-        is_log_email
-      )
-   VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-          [
-            logValuesBeforeUpdate[0], // receipt_number
-            logValuesBeforeUpdate[1], // email
-            currentData?.updated_at ?? null, // updated_at_status ← thêm giá trị cũ tại đây
-            ...logValuesBeforeUpdate.slice(2), // còn lại đúng thứ tự
-          ]
-        );
-      }
-
-      console.log('*** DEBUG UPDATE PARAM', {
-        action_desc: statusInfo.action_desc,
-        status_en: statusInfo.status_en,
-        status_vi,
-        updatedStatusAt,
-        raw_response: statusInfo.raw_response,
-        receipt,
-      });
-
-      const conn2 = await pool.getConnection();
-      const [result] = await conn2.execute(
-        `UPDATE uscis 
-           SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?
-           WHERE receipt_number = ?`,
+    if (hasChanged) {
+      await pool.query(
+        `INSERT INTO status_log (
+           updated_at_log, receipt_number, email, updated_at_status,
+           action_desc, status_en, status_vi, notice_date,
+           response_json, has_receipt, retries, form_info, is_log_email
+         ) VALUES (NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         [
-          statusInfo.action_desc,
-          statusInfo.status_en,
-          status_vi,
-          updatedStatusAt,
-          statusInfo.raw_response,
           receipt,
+          recipient_email,
+          currentData.updated_at,
+          currentData.action_desc,
+          currentData.status_en,
+          currentData.status_vi,
+          currentData.notice_date,
+          currentData.response_json,
+          currentData.has_receipt,
+          currentData.retries,
+          currentData.form_info,
         ]
       );
-      conn2.release();
-      console.log('✔ Rows affected:', result.affectedRows);
+    }
 
-      await sendStatusUpdateMail({
-        to: process.env.MAIL_NOTIFY,
-        receipt,
-        content: statusInfo.action_desc,
-        email: recipient_email,
-        formInfo: statusInfo.form_info,
-        bodyDate,
-        status_en: statusInfo.status_en,
+    await pool.query(
+      `UPDATE uscis 
+         SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?
+       WHERE receipt_number = ?`,
+      [
+        statusInfo.action_desc,
+        statusInfo.status_en,
         status_vi,
-      });
+        updatedStatusAt,
+        statusInfo.raw_response,
+        receipt,
+      ]
+    );
 
-      console.log(
-        `✅ USCIS status updated for ${receipt} → ${statusInfo.status_en} / ${status_vi}`
-      );
+    await sendStatusUpdateMail({
+      to: process.env.MAIL_NOTIFY,
+      receipt,
+      content: statusInfo.action_desc,
+      email: recipient_email,
+      formInfo: statusInfo.form_info,
+      bodyDate,
+      status_en: statusInfo.status_en,
+      status_vi,
+    });
 
-      await sleep(2500);
-    }
+    console.log(`✅ Cập nhật trạng thái ${receipt}: ${status_vi}`);
+    await sleep(2500);
+  }
 
-    if (insertedEmailRowId) {
-      try {
-        const conn = await pool.getConnection();
-        await conn.execute(
-          `UPDATE email_uscis SET message_id = ? WHERE id = ?`,
-          [messageId, insertedEmailRowId]
-        );
-        conn.release();
-        console.log(
-          `🔄 Đã cập nhật message_id cho email_uscis ID: ${insertedEmailRowId}`
-        );
-      } catch (err) {
-        console.error('❌ Lỗi khi cập nhật messageId:', err);
-      }
-    }
-  } catch (err) {
-    console.error('❌ Error inserting email:', err);
+  // ✅ Cập nhật message_id cuối cùng
+  if (messageId) {
+    await pool.query(
+      `UPDATE email_uscis SET message_id = ? WHERE id = ? AND message_id IS NULL`,
+      [messageId, emailRowId]
+    );
   }
 }
-
-module.exports = insertEmailToDB;
