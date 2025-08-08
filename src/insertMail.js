@@ -1,3 +1,71 @@
+const pool = require('./db/db');
+const getReceiptByEmail = require('./functions/getReceiptByEmail');
+const getStatus = require('./functions/getStatus');
+const sendStatusUpdateMail = require('./mail/mailer');
+const sendNoEmailStatus = require('./mail/no-mailer');
+const { convertVietnameseDateToSQL } = require('./utils/day');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+dayjs.extend(utc);
+
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+function extractForwardedRecipient(emailBody) {
+  const matches = emailBody.match(/Đến:\s.*<([^>\n\r]+)>/gim);
+  if (!matches || matches.length === 0) return null;
+
+  const lastMatch = matches[matches.length - 1];
+  const email = lastMatch.match(/<([^>\n\r]+)>/)?.[1];
+  return email?.trim() || null;
+}
+
+function extractSentDate(emailText) {
+  const match = emailText.match(/Đã gửi:\s*(.+)/i);
+  return match ? match[1].trim() : null;
+}
+
+function extractForwardedData(body) {
+  const lines = body.split('\n').map((line) => line.trim());
+  const fromLine = lines.find((line) => line.startsWith('Từ:'));
+  const dateLine = lines.find((line) => line.startsWith('Date:'));
+
+  const sender_email = fromLine?.match(/<(.+?)>/)?.[1] || null;
+  const sent_time_raw = dateLine || null;
+
+  return { sender_email, sent_time_raw };
+}
+
+function extractForwardedDataAndRecipient(body) {
+  const lines = body.split('\n').map((line) => line.trim());
+
+  let sender_email = null;
+  let recipient_email = null;
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+
+    if (!sender_email && /^Từ:.*<.+>$/.test(line)) {
+      sender_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (!recipient_email && /^Đến:.*<.+>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (!recipient_email && /^Tới:.*<.+?>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (!recipient_email && /^Tới:.*<.+>$/.test(line)) {
+      recipient_email = line.match(/<(.+?)>/)?.[1]?.trim() || null;
+    }
+
+    if (sender_email && recipient_email) break;
+  }
+
+  return { sender_email, recipient_email };
+}
+
 async function insertEmailToDB(parsed) {
   const {
     from: { text: from },
@@ -185,3 +253,5 @@ async function insertEmailToDB(parsed) {
     );
   }
 }
+
+module.exports = insertEmailToDB;
