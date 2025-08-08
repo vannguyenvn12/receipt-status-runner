@@ -1,5 +1,6 @@
 const db = require('./db/db');
 const { callUscisApi } = require('./api/uscisApi');
+const INVALID_MSG = 'The receipt number entered is invalid, please try again.';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -18,11 +19,17 @@ async function getStatusMap() {
 
 async function fetchNewReceipts({ limit = 100, receipt = null } = {}) {
   const params = [];
-  let where =
-    `COALESCE(action_desc,'')='' AND ` +
-    `COALESCE(status_en,'')='' AND ` +
-    `COALESCE(form_info,'')='' AND ` +
-    `COALESCE(response_json,'')=''`;
+
+  let where = `
+    COALESCE(action_desc,'') = '' AND
+    COALESCE(status_en,'')   = '' AND
+    COALESCE(form_info,'')   = '' AND
+    COALESCE(response_json,'') = '' AND
+    -- loại các bản ghi đã từng bị đánh dấu lỗi
+    COALESCE(form_info,'') <> 'error' AND
+    COALESCE(status_en,'') <> ?
+  `;
+  params.push(INVALID_MSG);
 
   if (receipt) {
     where += ` AND receipt_number = ?`;
@@ -38,7 +45,7 @@ async function fetchNewReceipts({ limit = 100, receipt = null } = {}) {
     WHERE ${where}
     ORDER BY id DESC
     LIMIT ?
-  `,
+    `,
     params
   );
 
@@ -46,41 +53,41 @@ async function fetchNewReceipts({ limit = 100, receipt = null } = {}) {
 }
 
 async function updateRowFromApi({ id, receipt_number, email }, statusMap) {
-  let result;
-  let retries = 0;
+  // Gọi 1 lần — retry đã nằm trong callUscisApi
+  const result = await callUscisApi(receipt_number);
 
-  while (retries < 3) {
-    result = await callUscisApi(receipt_number);
-
-    if (result?.wait) {
-      console.log(`⏸ API yêu cầu đợi (${receipt_number}), nghỉ 60s...`);
-      await sleep(60_000);
-      retries++;
-    } else {
-      break;
-    }
-  }
-
+  // Fail/invalid/wait → đánh dấu invalid
   if (!result || result.error || result.invalid || result.wait) {
-    console.error(`❌ Bỏ qua ${receipt_number} sau ${retries} lần thử`);
+    console.warn(`❌ ${receipt_number} không hợp lệ → đánh dấu invalid`);
+
+    const failPayload = {
+      reason: 'callUscisApi_failed_or_invalid',
+      last_result: result ?? null,
+    };
+
+    await db.query(
+      `
+      UPDATE uscis
+      SET
+        updated_at = ?,
+        action_desc = NULL,
+        status_en = ?,
+        status_vi = NULL,
+        notice_date = NULL,
+        form_info = 'error',
+        response_json = ?,
+        has_receipt = 1,
+        status_update = 0
+      WHERE id = ?
+      `,
+      [new Date(), INVALID_MSG, JSON.stringify(failPayload), id]
+    );
+
     return;
   }
 
+  // Thành công → cập nhật bình thường
   const statusVi = statusMap[result.status_en] || null;
-
-  const values = [
-    new Date(),
-    result.action_desc || null,
-    result.status_en || null,
-    statusVi,
-    result.notice_date || null,
-    result.form_info || null,
-    JSON.stringify(result.raw || {}),
-    retries,
-    true,
-    false,
-    id,
-  ];
 
   await db.query(
     `
@@ -93,12 +100,20 @@ async function updateRowFromApi({ id, receipt_number, email }, statusMap) {
       notice_date = ?,
       form_info = ?,
       response_json = ?,
-      retries = ?,
-      has_receipt = ?,
-      status_update = ?
+      has_receipt = 1,
+      status_update = 0
     WHERE id = ?
     `,
-    values
+    [
+      new Date(),
+      result.action_desc || null,
+      result.status_en || null,
+      statusVi,
+      result.notice_date || null,
+      result.form_info || null,
+      JSON.stringify(result.raw || {}),
+      id,
+    ]
   );
 
   console.log(`✅ Đã cập nhật: ${receipt_number}`);
