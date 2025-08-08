@@ -216,6 +216,15 @@ async function insertEmailToDB(parsed) {
       );
     }
 
+    console.log('*** DEBUG UPDATE PARAM', {
+      action_desc: statusInfo.action_desc,
+      status_en: statusInfo.status_en,
+      status_vi,
+      updatedStatusAt,
+      raw_response: statusInfo.raw_response,
+      receipt,
+    });
+
     await pool.query(
       `UPDATE uscis 
          SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?
@@ -225,7 +234,7 @@ async function insertEmailToDB(parsed) {
         statusInfo.status_en,
         status_vi,
         updatedStatusAt,
-        statusInfo.raw_response,
+        JSON.stringify(statusInfo.raw_response),
         receipt,
       ]
     );
