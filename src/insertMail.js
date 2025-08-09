@@ -227,7 +227,7 @@ async function insertEmailToDB(parsed) {
 
     await pool.query(
       `UPDATE uscis 
-         SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?
+         SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?, notice_date = ?
        WHERE receipt_number = ?`,
       [
         statusInfo.action_desc,
@@ -235,6 +235,7 @@ async function insertEmailToDB(parsed) {
         status_vi,
         updatedStatusAt,
         JSON.stringify(statusInfo.raw_response),
+        statusInfo.notice_date,
         receipt,
       ]
     );
