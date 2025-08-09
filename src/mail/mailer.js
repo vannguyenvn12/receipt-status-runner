@@ -27,7 +27,7 @@ async function sendStatusUpdateMail({
     html: `
         <p>📧 <strong>Email:</strong> ${email}</p>
         <p>📬 <strong>Receipt Number:</strong> ${receipt}</p>
-        <p>📄 <strong>Trạng thái:</strong> ${status_en} — ${status_vi}</p>
+        <p>📄 <strong>Trạng thái:</strong> ${status_en}</p>
         <p>📄 <strong>Form Info:</strong> ${formInfo}</p>
         <p>⏰ <strong>Thời gian cập nhật:</strong> ${bodyDate}</p>
         <p>📝 <strong>Nội dung:</strong> ${content}</p>
