@@ -1,6 +1,13 @@
 const db = require('./db/db');
 const { extractNoticeDate } = require('./api/uscisApi'); // đã có sẵn
 
+function dateDiffInDays(d1, d2) {
+  if (!d1 || !d2) return Infinity;
+  const t1 = new Date(d1).getTime();
+  const t2 = new Date(d2).getTime();
+  return Math.round((t1 - t2) / (1000 * 60 * 60 * 24));
+}
+
 async function checkAndUpdateNoticeDate() {
   // Lấy các hồ sơ có action_desc
   const [rows] = await db.query(`
@@ -21,7 +28,20 @@ async function checkAndUpdateNoticeDate() {
       ? new Date(row.notice_date).toISOString().split('T')[0]
       : null;
 
-    if (current !== extracted) {
+    // Nếu current null thì chắc chắn cần update
+    if (!current) {
+      toUpdate.push({
+        id: row.id,
+        receipt: row.receipt_number,
+        oldDate: current,
+        newDate: extracted,
+      });
+      continue;
+    }
+
+    // Cho phép lệch ±1 ngày
+    const diff = Math.abs(dateDiffInDays(current, extracted));
+    if (diff > 1) {
       toUpdate.push({
         id: row.id,
         receipt: row.receipt_number,
@@ -33,7 +53,7 @@ async function checkAndUpdateNoticeDate() {
 
   // Log trước khi update
   if (toUpdate.length === 0) {
-    console.log('🟡 Không có hồ sơ nào có notice_date khác.');
+    console.log('🟡 Không có hồ sơ nào có notice_date cần chỉnh.');
     return;
   }
 
