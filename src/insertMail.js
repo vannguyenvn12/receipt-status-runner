@@ -190,6 +190,11 @@ async function insertEmailToDB(parsed) {
       statusInfo.action_desc !== currentData.action_desc ||
       statusInfo.notice_date !== currentData.notice_date;
 
+      const hasChanged2 =
+      statusInfo.status_en !== currentData.status_en ||
+      statusInfo.action_desc !== currentData.action_desc;
+
+
     const updatedStatusAt = hasChanged
       ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
       : currentData.updated_status_at ?? null;
@@ -242,7 +247,7 @@ async function insertEmailToDB(parsed) {
     );
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
-    if (hasChanged) {
+    if (hasChanged2) {
       await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
