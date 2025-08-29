@@ -15,7 +15,6 @@ async function checkAndUpdateNoticeDate() {
     FROM uscis
     WHERE COALESCE(action_desc,'') <> ''
     ORDER BY id DESC
-    LIMIT 500
   `);
 
   let toUpdate = [];
