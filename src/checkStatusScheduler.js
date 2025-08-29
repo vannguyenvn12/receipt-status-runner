@@ -2,6 +2,13 @@ const db = require('./db/db');
 const { callUscisApi } = require('./api/uscisApi');
 const sendStatusUpdateMail = require('./mail/mailer');
 const { toSQLDateTime, toVietnameseDateString } = require('./utils/day');
+const path = require('path');
+const { mkdir, appendFile } = require('fs').promises;
+
+const LOG_DIR = path.join(process.cwd(), 'logs');
+const LOG_FILE = () =>
+  path.join(LOG_DIR, `uscis_meta_update_${new Date().toISOString().slice(0,10)}.log`);
+
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -82,6 +89,22 @@ async function checkUSCISUpdates() {
                 row.receipt_number,
               ]
             );
+
+            try {
+              await mkdir(LOG_DIR, { recursive: true });
+
+              const safe = (s) => (s ?? '').toString().replace(/\s+/g, ' ').slice(0, 500);
+              const line =
+                `[${new Date().toISOString()}] META-UPDATE ${row.receipt_number} ` +
+                `old_notice=${row.notice_date ?? ''} -> new_notice=${result.notice_date ?? ''} | ` +
+                `old_form=${safe(row.form_info)} -> new_form=${safe(result.form_info)} | ` +
+                `old_action=${safe(row.action_desc)} ||| new_action=${safe(newActionDesc)}\n`;
+
+              await appendFile(LOG_FILE(), line, 'utf8');
+            } catch (e) {
+              console.warn('⚠️ Ghi log TXT thất bại:', e.message);
+            }
+
             console.log(`↪️ [Định kỳ]: Cập nhật meta (notice_date/form_info/action_desc): ${row.receipt_number}`);
           } else {
             await db.query(`UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`, [row.receipt_number]);
@@ -127,7 +150,7 @@ async function checkUSCISUpdates() {
         await db.query(
           `UPDATE uscis SET
             status_en = ?, status_vi = ?, action_desc = ?,
-            updated_at = NOW(), updated_status_at = ?, notice_date = ?, form_info = ?,
+            updated_at = NOW(), updated_status_at = ?, notice_date = COALESCE(?, notice_date), form_info = ?,
             response_json = ?, retries = 0, status_update = TRUE
           WHERE receipt_number = ?`,
           [
@@ -135,7 +158,7 @@ async function checkUSCISUpdates() {
             newStatusVi,
             newActionDesc,
             toSQLDateTime(date),
-            result.notice_date,
+            result.notice_date || null,
             result.form_info,
             JSON.stringify(result.raw),
             row.receipt_number,
