@@ -187,7 +187,8 @@ async function insertEmailToDB(parsed) {
 
     const hasChanged =
       statusInfo.status_en !== currentData.status_en ||
-      statusInfo.action_desc !== currentData.action_desc;
+      statusInfo.action_desc !== currentData.action_desc ||
+      statusInfo.notice_date !== currentData.notice_date;
 
     const updatedStatusAt = hasChanged
       ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
@@ -235,7 +236,7 @@ async function insertEmailToDB(parsed) {
         status_vi,
         updatedStatusAt,
         JSON.stringify(statusInfo.raw_response),
-        statusInfo.notice_date,
+        statusInfo.notice_date || null,
         receipt,
       ]
     );

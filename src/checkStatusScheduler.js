@@ -59,14 +59,39 @@ async function checkUSCISUpdates() {
         const newActionDesc = result.action_desc;
 
         if (newStatusEn === row.status_en) {
-          await db.query(
-            `UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`,
-            [row.receipt_number]
-          );
-          console.log(`↪️ [Định kỳ]: Không thay đổi: ${row.receipt_number}`);
+          const needMetaUpdate =
+            (newActionDesc && newActionDesc !== row.action_desc) ||
+            (result.notice_date && result.notice_date !== row.notice_date) ||
+            (result.form_info && result.form_info !== row.form_info);
+
+          if (needMetaUpdate) {
+            await db.query(
+              `UPDATE uscis SET
+                action_desc = ?,
+                notice_date = COALESCE(?, notice_date),
+                form_info   = COALESCE(?, form_info),
+                response_json = ?,
+                updated_at = NOW(),
+                status_update = FALSE
+              WHERE receipt_number = ?`,
+              [
+                newActionDesc,
+                result.notice_date || null,
+                result.form_info || null,
+                JSON.stringify(result.raw),
+                row.receipt_number,
+              ]
+            );
+            console.log(`↪️ [Định kỳ]: Cập nhật meta (notice_date/form_info/action_desc): ${row.receipt_number}`);
+          } else {
+            await db.query(`UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`, [row.receipt_number]);
+            console.log(`↪️ [Định kỳ]: Không thay đổi: ${row.receipt_number}`);
+          }
+
           await sleep(5000);
           continue;
         }
+
 
         const [[map]] = await db.query(
           `SELECT vietnamese_status FROM setting_uscis_phase_group WHERE english_status = ?`,
