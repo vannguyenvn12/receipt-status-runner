@@ -9,6 +9,7 @@ let imap; // Global để tái sử dụng
 let reconnectTimeout = null;
 
 function retryProcessEmails() {
+  // Quét lại 2 ngày gần đây
   imap.search(
     ['ALL', ['SINCE', new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)]],
     (err, results) => {
@@ -24,26 +25,31 @@ function retryProcessEmails() {
           simpleParser(stream, async (err, parsed) => {
             if (err) return;
 
-            const [[existing]] = await pool.query(
-              `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
-              [parsed.messageId]
-            );
-            if (existing) {
-              console.log(
-                `⏭ [RETRY SKIP] Đã xử lý rồi: ${parsed.subject} – ${parsed.messageId}`
+            try {
+              // ⚠️ Chặn trùng theo message_id trước khi xử lý
+              const [[existing]] = await pool.query(
+                `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
+                [parsed.messageId]
               );
-              return;
-            }
+              if (existing) {
+                console.log(
+                  `⏭ [RETRY SKIP] Đã xử lý rồi: ${parsed.subject} – ${parsed.messageId}`
+                );
+                return;
+              }
 
-            if (isForwardedChangeEmail(parsed)) {
-              console.log(
-                `🔁 [RETRY PROCESS] Xử lý lại mail: ${parsed.subject} – ${parsed.messageId}`
-              );
-              await insertEmailToDB(parsed);
-            } else {
-              console.log(
-                `❌ [RETRY IGNORED] Không phải mail forward hợp lệ: ${parsed.subject}`
-              );
+              if (isForwardedChangeEmail(parsed)) {
+                console.log(
+                  `🔁 [RETRY PROCESS] Xử lý lại mail: ${parsed.subject} – ${parsed.messageId}`
+                );
+                await insertEmailToDB(parsed);
+              } else {
+                console.log(
+                  `❌ [RETRY IGNORED] Không phải mail forward hợp lệ: ${parsed.subject}`
+                );
+              }
+            } catch (e) {
+              console.error('❌ [RETRY ERROR] ', e);
             }
           });
         });
@@ -67,6 +73,7 @@ function createImapConnection() {
       if (err) return console.error('❌ openInbox error:', err);
 
       imap.on('mail', () => {
+        // Fetch phần mới đến; Gmail đôi khi báo total tăng +1
         const fetch = imap.seq.fetch(`${box.messages.total}:*`, {
           bodies: '',
           struct: true,
@@ -76,16 +83,36 @@ function createImapConnection() {
           msg.on('body', (stream) => {
             simpleParser(stream, async (err, parsed) => {
               if (err) return console.error('❌ Parse error:', err);
-              console.log('📧 New Email:', {
-                from: parsed.from.text,
-                to: parsed.to.text,
-                subject: parsed.subject,
-                date: parsed.date,
-                body: parsed.text,
-              });
 
-              if (isForwardedChangeEmail(parsed)) {
-                await insertEmailToDB(parsed);
+              try {
+                console.log('📧 New Email:', {
+                  from: parsed.from?.text,
+                  to: parsed.to?.text,
+                  subject: parsed.subject,
+                  date: parsed.date,
+                });
+
+                // ⚠️ Chặn trùng theo message_id trước khi insert
+                const [[existing]] = await pool.query(
+                  `SELECT id FROM email_uscis WHERE message_id = ? LIMIT 1`,
+                  [parsed.messageId]
+                );
+                if (existing) {
+                  console.log(
+                    `⏭ [NEW SKIP] Đã xử lý rồi: ${parsed.subject} – ${parsed.messageId}`
+                  );
+                  return;
+                }
+
+                if (isForwardedChangeEmail(parsed)) {
+                  await insertEmailToDB(parsed);
+                } else {
+                  console.log(
+                    `❌ [NEW IGNORED] Không phải mail forward hợp lệ: ${parsed.subject}`
+                  );
+                }
+              } catch (e) {
+                console.error('❌ Handler error:', e);
               }
             });
           });
