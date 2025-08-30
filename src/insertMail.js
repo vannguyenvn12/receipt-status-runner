@@ -247,7 +247,7 @@ async function insertEmailToDB(parsed) {
     );
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
-    if (hasChanged) {
+    if (hasChanged2) {
       await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
