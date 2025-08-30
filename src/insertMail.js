@@ -276,6 +276,7 @@ async function insertEmailToDB(parsed) {
       [messageId, emailRowId]
     );
 
+    console.log('>>> UPDATE MESSAGE ID => SEND EMAIL')
     await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
