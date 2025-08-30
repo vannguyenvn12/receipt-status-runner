@@ -275,6 +275,17 @@ async function insertEmailToDB(parsed) {
       `UPDATE email_uscis SET message_id = ? WHERE id = ? AND message_id IS NULL`,
       [messageId, emailRowId]
     );
+
+    await sendStatusUpdateMail({
+        to: process.env.MAIL_NOTIFY,
+        receipt,
+        content: statusInfo.action_desc,
+        email: recipient_email,
+        formInfo: statusInfo.form_info,
+        bodyDate,
+        status_en: statusInfo.status_en,
+        status_vi,
+      });
   }
 }
 
