@@ -99,8 +99,12 @@ async function insertEmailToDB(parsed) {
     [subject, recipient_email, forwarded_date]
   );
 
-  const hadMessageIdAtStart = !!(
-    existingRow?.message_id && existingRow.message_id.trim() !== ''
+  const hadMessageIdAtStart = existingRow?.message_id;
+
+  console.log(
+    '🔍 hadMessageIdAtStart >> Có id không?',
+    existingRow.id,
+    hadMessageIdAtStart
   );
 
   if (existingRow) {
