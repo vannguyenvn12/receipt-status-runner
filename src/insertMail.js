@@ -99,8 +99,6 @@ async function insertEmailToDB(parsed) {
     [subject, recipient_email, forwarded_date]
   );
 
-  const hadMessageIdAtStart = existingRow?.message_id;
-
   console.log(
     '🔍 hadMessageIdAtStart >> Có id không?',
     existingRow.id,
@@ -131,6 +129,14 @@ async function insertEmailToDB(parsed) {
     emailRowId = insertResult.insertId;
     console.log(`✅ Inserted email ID: ${emailRowId}`);
   }
+
+  const [[rowMessage]] = await pool.query(
+    'SELECT message_id FROM email_uscis WHERE id = ?',
+    [emailRowId]
+  );
+  const isMessageIdNull = !(
+    rowMessage?.message_id && rowMessage.message_id.trim() !== ''
+  );
 
   // 🔍 Lấy danh sách receipt liên kết với email
   const receipts = await getReceiptByEmail(recipient_email);
@@ -254,7 +260,11 @@ async function insertEmailToDB(parsed) {
     );
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
-    if (hasChanged2 || !hadMessageIdAtStart) {
+    let sentOnceForThisEmail = false;
+    const shouldSendEmail =
+      (hasChanged2 || isMessageIdNull) && !sentOnceForThisEmail;
+
+    if (shouldSendEmail) {
       await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
@@ -266,6 +276,7 @@ async function insertEmailToDB(parsed) {
         status_vi,
       });
       console.log(`📧 Đã gửi mail cập nhật cho ${receipt}`);
+      sentOnceForThisEmail = true;
     } else {
       console.log(
         `⏭ Không thay đổi trạng thái cho ${receipt} → không gửi mail`
