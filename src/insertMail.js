@@ -132,6 +132,8 @@ async function insertEmailToDB(parsed) {
     rowMessage?.message_id && rowMessage.message_id.trim() !== ''
   );
 
+  console.log('>>> isMessageIdNull', rowMessage.id, isMessageIdNull);
+
   // 🔍 Lấy danh sách receipt liên kết với email
   const receipts = await getReceiptByEmail(recipient_email);
   console.log('📬 Receipts:', receipts);
@@ -257,6 +259,8 @@ async function insertEmailToDB(parsed) {
     let sentOnceForThisEmail = false;
     const shouldSendEmail =
       (hasChanged2 || isMessageIdNull) && !sentOnceForThisEmail;
+
+    console.log('>>> shouldSendEmail', shouldSendEmail);
 
     if (shouldSendEmail) {
       await sendStatusUpdateMail({
