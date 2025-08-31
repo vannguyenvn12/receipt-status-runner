@@ -99,12 +99,6 @@ async function insertEmailToDB(parsed) {
     [subject, recipient_email, forwarded_date]
   );
 
-  console.log(
-    '🔍 hadMessageIdAtStart >> Có id không?',
-    existingRow.id,
-    hadMessageIdAtStart
-  );
-
   if (existingRow) {
     console.log(`📨 Email đã tồn tại trước đó với ID: ${existingRow.id}`);
     emailRowId = existingRow.id;
