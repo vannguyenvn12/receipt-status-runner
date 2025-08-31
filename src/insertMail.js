@@ -87,7 +87,11 @@ async function insertEmailToDB(parsed) {
   const bodyDate = extractSentDate(email_body);
   const sqlDate = convertVietnameseDateToSQL(bodyDate);
 
-  console.log('*** CHECK EMAIL', { receiverAddress, sender_email });
+  console.log('*** CHECK EMAIL', {
+    receiverAddress,
+    sender_email,
+    recipient_email,
+  });
 
   let emailRowId = null;
 
@@ -125,7 +129,7 @@ async function insertEmailToDB(parsed) {
   }
 
   const [[rowMessage]] = await pool.query(
-    'SELECT message_id FROM email_uscis WHERE id = ?',
+    'SELECT id, message_id FROM email_uscis WHERE id = ?',
     [emailRowId]
   );
   const isMessageIdNull = !(
@@ -162,6 +166,7 @@ async function insertEmailToDB(parsed) {
     return;
   }
 
+  let sentOnceForThisEmail = false;
   // 🚀 Tiến hành xử lý từng receipt
   for (const receipt of receipts) {
     console.log(`📦 Đang xử lý receipt: ${receipt}`);
@@ -256,7 +261,6 @@ async function insertEmailToDB(parsed) {
     );
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
-    let sentOnceForThisEmail = false;
     const shouldSendEmail =
       (hasChanged2 || isMessageIdNull) && !sentOnceForThisEmail;
 
