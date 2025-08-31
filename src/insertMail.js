@@ -124,14 +124,6 @@ async function insertEmailToDB(parsed) {
     console.log(`✅ Inserted email ID: ${emailRowId}`);
   }
 
-    if (messageId) {
-      await pool.query(
-        `UPDATE email_uscis SET message_id = ? WHERE id = ? AND (message_id IS NULL OR message_id = '')`,
-        [messageId, emailRowId]
-      );
-    }
-
-
   // 🔍 Lấy danh sách receipt liên kết với email
   const receipts = await getReceiptByEmail(recipient_email);
   console.log('📬 Receipts:', receipts);
@@ -198,10 +190,9 @@ async function insertEmailToDB(parsed) {
       statusInfo.action_desc !== currentData.action_desc ||
       statusInfo.notice_date !== currentData.notice_date;
 
-      const hasChanged2 =
+    const hasChanged2 =
       statusInfo.status_en !== currentData.status_en ||
       statusInfo.action_desc !== currentData.action_desc;
-
 
     const updatedStatusAt = hasChanged
       ? dayjs().utc().format('YYYY-MM-DD HH:mm:ss')
@@ -254,8 +245,6 @@ async function insertEmailToDB(parsed) {
       ]
     );
 
-   
-
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
     if (hasChanged2) {
       await sendStatusUpdateMail({
@@ -279,7 +268,13 @@ async function insertEmailToDB(parsed) {
     await sleep(2500);
   }
 
-  
+  // Last
+  if (messageId) {
+    await pool.query(
+      `UPDATE email_uscis SET message_id = ? WHERE id = ? AND (message_id IS NULL OR message_id = '')`,
+      [messageId, emailRowId]
+    );
+  }
 }
 
 module.exports = insertEmailToDB;
