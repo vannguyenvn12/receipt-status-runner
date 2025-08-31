@@ -99,6 +99,10 @@ async function insertEmailToDB(parsed) {
     [subject, recipient_email, forwarded_date]
   );
 
+  const hadMessageIdAtStart = !!(
+    existingRow?.message_id && existingRow.message_id.trim() !== ''
+  );
+
   if (existingRow) {
     console.log(`📨 Email đã tồn tại trước đó với ID: ${existingRow.id}`);
     emailRowId = existingRow.id;
@@ -246,7 +250,7 @@ async function insertEmailToDB(parsed) {
     );
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
-    if (hasChanged2) {
+    if (hasChanged2 || !hadMessageIdAtStart) {
       await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
