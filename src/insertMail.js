@@ -291,6 +291,7 @@ async function insertEmailToDB(parsed) {
 
   // Last
   if (messageId) {
+    console.log('>>> Cập nhật status cho', emailRowId);
     await pool.query(
       `UPDATE email_uscis SET message_id = ? WHERE id = ? AND (message_id IS NULL OR message_id = '')`,
       [messageId, emailRowId]
