@@ -90,21 +90,6 @@ async function checkUSCISUpdates() {
               ]
             );
 
-            try {
-              await mkdir(LOG_DIR, { recursive: true });
-
-              const safe = (s) => (s ?? '').toString().replace(/\s+/g, ' ').slice(0, 500);
-              const line =
-                `[${new Date().toISOString()}] META-UPDATE ${row.receipt_number} ` +
-                `old_notice=${row.notice_date ?? ''} -> new_notice=${result.notice_date ?? ''} | ` +
-                `old_form=${safe(row.form_info)} -> new_form=${safe(result.form_info)} | ` +
-                `old_action=${safe(row.action_desc)} ||| new_action=${safe(newActionDesc)}\n`;
-
-              await appendFile(LOG_FILE(), line, 'utf8');
-            } catch (e) {
-              console.warn('⚠️ Ghi log TXT thất bại:', e.message);
-            }
-
             console.log(`↪️ [Định kỳ]: Cập nhật meta (notice_date/form_info/action_desc): ${row.receipt_number}`);
           } else {
             await db.query(`UPDATE uscis SET updated_at = NOW() WHERE receipt_number = ?`, [row.receipt_number]);
