@@ -35,10 +35,13 @@ async function sendStatusUpdateMail({
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📩 Email đã gửi đến ${to} (${receipt})`);
+    const info = await transporter.sendMail(mailOptions);
+    const messageId = info?.messageId || null;
+    console.log(`📩 Email đã gửi đến ${to} (${receipt}) — messageId=${messageId}`);
+    return { messageId };
   } catch (error) {
     console.error('❌ Gửi email thất bại:', error.message);
+    return { messageId: null, error: error.message };
   }
 }
 
