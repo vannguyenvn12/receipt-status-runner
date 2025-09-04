@@ -19,7 +19,7 @@ async function sendNoEmailStatus({ to, email }) {
       <div style="font-family: Arial, sans-serif; background-color: #fff8f8; padding: 20px; border: 1px solid #ffcfcf; border-radius: 8px;">
         <h2 style="color: #d93025;">⚠️ CẢNH BÁO HỆ THỐNG</h2>
         <p style="font-size: 16px; color: #333;">
-          Hệ thống phát hiện một địa chỉ email không tồn tại trong hệ thống.
+         Địa chỉ email này không tồn tại trong app VIETPRO
         </p>
         <p style="font-size: 16px; color: #d93025;">
           <strong>Email không hợp lệ:</strong> <span style="background-color: #ffecec; padding: 4px 8px; border-radius: 4px;">${email}</span>
