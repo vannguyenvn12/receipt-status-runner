@@ -31,15 +31,15 @@ cron.schedule('*/30 * * * *', async () => {
 });
 
 // EMAIL: chạy mỗi 30 phút
-cron.schedule('*/30 * * * *', () => {
-  if (!imap || !imap.state || imap.state !== 'authenticated') {
-    console.log('⚠️ IMAP chưa kết nối, bỏ qua retry');
-    return;
-  }
+// cron.schedule('*/30 * * * *', () => {
+//   if (!imap || !imap.state || imap.state !== 'authenticated') {
+//     console.log('⚠️ IMAP chưa kết nối, bỏ qua retry');
+//     return;
+//   }
 
-  console.log('⏰ Bắt đầu phiên EMAIL');
-  retryProcessEmails();
-});
+//   console.log('⏰ Bắt đầu phiên EMAIL');
+//   retryProcessEmails();
+// });
 
 // NEW RECEIPT: chạy mỗi 15 phút
 cron.schedule('*/15 * * * *', async () => {
@@ -60,19 +60,19 @@ cron.schedule('*/15 * * * *', async () => {
 });
 
 // RETRY INVALID: chạy mỗi 60 phút
-cron.schedule('0 * * * *', async () => {
-  if (isRunningRetryInvalid) {
-    console.log('⚠️ Đang có phiên RETRY INVALID đang chạy → bỏ qua lần gọi này');
-    return;
-  }
-  isRunningRetryInvalid = true;
-  console.log('⏰ Bắt đầu phiên RETRY INVALID');
-  try {
-    await handleRetryInvalid(); // gọi hàm main() trong retryInvalidReceipts.js
-    console.log('✅ Hoàn tất phiên RETRY INVALID');
-  } catch (err) {
-    console.error('💥 Lỗi trong RETRY INVALID:', err.message);
-  } finally {
-    isRunningRetryInvalid = false;
-  }
-});
+// cron.schedule('0 * * * *', async () => {
+//   if (isRunningRetryInvalid) {
+//     console.log('⚠️ Đang có phiên RETRY INVALID đang chạy → bỏ qua lần gọi này');
+//     return;
+//   }
+//   isRunningRetryInvalid = true;
+//   console.log('⏰ Bắt đầu phiên RETRY INVALID');
+//   try {
+//     await handleRetryInvalid(); // gọi hàm main() trong retryInvalidReceipts.js
+//     console.log('✅ Hoàn tất phiên RETRY INVALID');
+//   } catch (err) {
+//     console.error('💥 Lỗi trong RETRY INVALID:', err.message);
+//   } finally {
+//     isRunningRetryInvalid = false;
+//   }
+// });
