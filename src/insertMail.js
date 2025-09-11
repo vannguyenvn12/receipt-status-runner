@@ -245,7 +245,7 @@ async function insertEmailToDB(parsed) {
       receipt,
     });
 
-    const [updateRes] =  await pool.query(
+    const [updateRes] = await pool.query(
       `UPDATE uscis 
          SET action_desc = ?, status_en = ?, status_vi = ?, updated_at = NOW(), updated_status_at = ?, response_json = ?, notice_date = ?, form_info = ?
        WHERE receipt_number = ?`,
@@ -270,7 +270,7 @@ async function insertEmailToDB(parsed) {
     console.log('>>> shouldSendEmail', shouldSendEmail);
 
     if (shouldSendEmail) {
-      const {messageId} = await sendStatusUpdateMail({
+      const { messageId } = await sendStatusUpdateMail({
         to: process.env.MAIL_NOTIFY,
         receipt,
         content: statusInfo.action_desc,
@@ -280,23 +280,19 @@ async function insertEmailToDB(parsed) {
         status_en: statusInfo.status_en,
         status_vi,
       });
-       // Last
+      // Last
       if (messageId) {
-        console.log(`📧 Đã gửi mail cập nhật cho ${receipt}`);
+        console.log(`📧 Đã gửi mail cập nhật cho ${receipt} với id: ${emailRowId} và messageId: ${messageId}`);
         sentOnceForThisEmail = true;
 
         // Last — CHỈ cập nhật message_id khi THỰC SỰ ĐỔI STATUS
-        if (hasChanged2) {
-          await pool.query(
-            `UPDATE email_uscis
+        await pool.query(
+          `UPDATE email_uscis
               SET message_id = ?
             WHERE id = ?
               AND (message_id IS NULL OR message_id = '')`,
-            [messageId, emailRowId]
-          );
-        } else {
-          console.log('⏭ Bỏ qua cập nhật message_id vì status không đổi (chỉ gửi mail do message_id đang null).');
-        }
+          [messageId, emailRowId]
+        );
       } else {
         console.warn(`⚠️ Gửi mail thất bại hoặc không có messageId cho ${receipt}`);
       }
@@ -311,7 +307,7 @@ async function insertEmailToDB(parsed) {
     await sleep(2500);
   }
 
- 
+
 }
 
 module.exports = insertEmailToDB;
