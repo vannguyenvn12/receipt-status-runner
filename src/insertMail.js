@@ -265,7 +265,7 @@ async function insertEmailToDB(parsed) {
 
     // 🔔 Chỉ gửi email khi thực sự có thay đổi
     const shouldSendEmail =
-      (hasChanged2 || isMessageIdNull) && !sentOnceForThisEmail;
+      (hasChanged2 || isMessageIdNull);
 
     console.log('>>> shouldSendEmail', shouldSendEmail);
 

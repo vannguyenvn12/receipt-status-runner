@@ -31,15 +31,15 @@ cron.schedule('*/30 * * * *', async () => {
 });
 
 // EMAIL: chạy mỗi 30 phút
-// cron.schedule('*/30 * * * *', () => {
-//   if (!imap || !imap.state || imap.state !== 'authenticated') {
-//     console.log('⚠️ IMAP chưa kết nối, bỏ qua retry');
-//     return;
-//   }
+cron.schedule('*/30 * * * *', () => {
+  if (!imap || !imap.state || imap.state !== 'authenticated') {
+    console.log('⚠️ IMAP chưa kết nối, bỏ qua retry');
+    return;
+  }
 
-//   console.log('⏰ Bắt đầu phiên EMAIL');
-//   retryProcessEmails();
-// });
+  console.log('⏰ Bắt đầu phiên EMAIL');
+  retryProcessEmails();
+});
 
 // NEW RECEIPT: chạy mỗi 15 phút
 cron.schedule('*/15 * * * *', async () => {
