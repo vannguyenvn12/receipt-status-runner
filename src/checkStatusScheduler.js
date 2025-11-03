@@ -17,9 +17,12 @@ async function checkUSCISUpdates() {
     const [rows] = await db.query(`
       SELECT u.*
       FROM uscis u
-      JOIN setting_uscis_phase_group s ON u.status_en = s.english_status
-      WHERE s.update_hour > 0
-        AND TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) >= s.update_hour * 60
+      LEFT JOIN setting_uscis_phase_group s ON u.status_en = s.english_status
+      WHERE (
+        (s.update_hour IS NULL AND TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) >= 60)
+        OR
+        (s.update_hour > 0 AND TIMESTAMPDIFF(MINUTE, u.updated_at, NOW()) >= s.update_hour * 60)
+      )
     `);
 
     if (!rows.length) {
